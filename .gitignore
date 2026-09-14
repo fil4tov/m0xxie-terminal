@@ -6,3 +6,4 @@ qa/
 dist/
 coverage/
 deploy
+public/audio
