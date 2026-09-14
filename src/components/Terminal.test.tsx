@@ -5,7 +5,10 @@ import { links, musicLinks } from "../config";
 
 describe("Terminal", () => {
   beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
   const submit = (command: string) => {
     fireEvent.change(screen.getByRole("combobox"), {
       target: { value: command },
@@ -370,6 +373,105 @@ describe("Terminal", () => {
     } finally {
       window.history.replaceState(null, "", originalUrl);
     }
+  });
+  it.each(["myip", "/myip"])(
+    "fetches the public IP only when %s is executed",
+    async (command) => {
+      const fetchIp = vi
+        .fn()
+        .mockResolvedValue({
+          ok: true,
+          json: async () => ({ ip: "2001:db8::42" }),
+        });
+      vi.stubGlobal("fetch", fetchIp);
+      render(<Terminal onListen={vi.fn()} />);
+      expect(fetchIp).not.toHaveBeenCalled();
+      submit(command);
+      expect(screen.getByRole("log")).toHaveTextContent("Определяю IP…");
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(fetchIp).toHaveBeenCalledWith(
+        "https://api64.ipify.org?format=json",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(screen.getByRole("log")).toHaveTextContent("2001:db8::42");
+      expect(screen.getByRole("log")).not.toHaveTextContent("Определяю IP…");
+    },
+  );
+  it.each(["network", "http", "invalid"])(
+    "reports an IP lookup %s failure",
+    async (failure) => {
+      vi.stubGlobal(
+        "fetch",
+        failure === "network"
+          ? vi.fn().mockRejectedValue(new Error("Offline"))
+          : vi
+              .fn()
+              .mockResolvedValue({
+                ok: failure !== "http",
+                json: async () => ({}),
+              }),
+      );
+      render(<Terminal onListen={vi.fn()} />);
+      submit("myip");
+      await act(() => vi.advanceTimersByTimeAsync(3000));
+      expect(screen.getByRole("log")).toHaveTextContent(
+        "Не удалось получить IP. Попробуй ещё раз.",
+      );
+    },
+  );
+  it("discards pending IP responses when the terminal is cleared", async () => {
+    let resolve!: (value: unknown) => void;
+    const fetchIp = vi.fn().mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    vi.stubGlobal("fetch", fetchIp);
+    render(<Terminal onListen={vi.fn()} />);
+    submit("myip");
+    const signal = fetchIp.mock.calls[0][1].signal;
+    submit("clear");
+    expect(signal.aborted).toBe(true);
+    await act(async () => {
+      resolve({ ok: true, json: async () => ({ ip: "192.0.2.1" }) });
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(screen.getByRole("log")).toBeEmptyDOMElement();
+  });
+  it("times out an IP request and continues printing queued commands", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url, { signal }) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () =>
+              reject(new Error("Aborted")),
+            );
+          }),
+      ),
+    );
+    render(<Terminal onListen={vi.fn()} />);
+    submit("myip");
+    submit("ping");
+    await act(() => vi.advanceTimersByTimeAsync(9999));
+    expect(screen.getByRole("log")).toHaveTextContent("Определяю IP…");
+    expect(screen.getByRole("log")).not.toHaveTextContent("pong");
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(screen.getByRole("log")).toHaveTextContent(
+      "Не удалось получить IP. Попробуй ещё раз.",
+    );
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(screen.getByRole("log")).toHaveTextContent("pong");
+  });
+  it("cancels IP requests when the terminal unmounts", () => {
+    const fetchIp = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal("fetch", fetchIp);
+    const { unmount } = render(<Terminal onListen={vi.fn()} />);
+    submit("myip");
+    const signal = fetchIp.mock.calls[0][1].signal;
+    unmount();
+    expect(signal.aborted).toBe(true);
   });
   it("handles unknown commands and remembers submitted input", async () => {
     render(<Terminal onListen={vi.fn()} />);

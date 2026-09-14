@@ -26,6 +26,7 @@ interface Entry extends CommandResult {
   command: string;
   visible: number;
   done: boolean;
+  pending?: boolean;
 }
 export interface TerminalHandle {
   execute: (command: string) => void;
@@ -45,6 +46,14 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
       history = useRef<string[]>([]),
       historyIndex = useRef(0),
       listenRef = useRef(onListen);
+    const requests = useRef(new Map<number, () => void>());
+    useEffect(() => {
+      const pending = requests.current;
+      return () => {
+        pending.forEach((cancel) => cancel());
+        pending.clear();
+      };
+    }, []);
     const reduced = useReducedMotion();
     useEffect(() => {
       listenRef.current = onListen;
@@ -84,6 +93,8 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
       element.focus({ preventScroll: true });
     }
     function reset() {
+      requests.current.forEach((cancel) => cancel());
+      requests.current.clear();
       setEntries([]);
       setValue("");
       setMenu(false);
@@ -93,6 +104,43 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
       setMenu(showMenu ? false : "all");
       setSelected(0);
       focus();
+    }
+    async function fetchIp(id: number) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 10_000);
+      requests.current.set(id, () => {
+        window.clearTimeout(timeout);
+        controller.abort();
+      });
+      let text: string;
+      try {
+        const response = await fetch("https://api64.ipify.org?format=json", {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("IP lookup failed");
+        const data: unknown = await response.json();
+        if (
+          !data ||
+          typeof data !== "object" ||
+          !("ip" in data) ||
+          typeof data.ip !== "string" ||
+          !data.ip.trim()
+        )
+          throw new Error("Invalid IP response");
+        text = data.ip.trim();
+      } catch {
+        text = "Не удалось получить IP. Попробуй ещё раз.";
+      } finally {
+        window.clearTimeout(timeout);
+      }
+      if (!requests.current.delete(id)) return;
+      setEntries((previous) =>
+        previous.map((entry) =>
+          entry.id === id
+            ? { ...entry, text, visible: 0, pending: false }
+            : entry,
+        ),
+      );
     }
     function execute(raw: string) {
       raw = raw.trim();
@@ -107,20 +155,24 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
         reset();
         return;
       }
+      const id = ++counter.current;
+      const pending = result.action === "myip";
       setEntries((previous) => [
         ...previous,
         {
           ...result,
-          id: ++counter.current,
+          id,
           command: raw,
-          visible: 0,
+          visible: pending ? result.text.length : 0,
           done: false,
+          pending,
         },
       ]);
+      if (pending) void fetchIp(id);
     }
     useImperativeHandle(ref, () => ({ execute, reset, focus }));
     useEffect(() => {
-      if (!active) return;
+      if (!active || active.pending) return;
       const entry = active;
       const length =
         entry.text.length +
@@ -147,7 +199,7 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
       );
       return () => window.clearInterval(timer);
       // The active entry owns one timer; character updates must not restart it.
-    }, [active?.id, reduced]);
+    }, [active?.id, active?.pending, reduced]);
     useLayoutEffect(() => {
       if (chat.current) chat.current.scrollTop = chat.current.scrollHeight;
     }, [entries, showMenu, filtered.length]);
