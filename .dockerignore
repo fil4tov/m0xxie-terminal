@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+.git
+.idea
+.codex
+.agents
+.sites-runtime
+.openai
+qa
+*.log
+.env
+.env.*
+README.md
+**/git-token
+**/deploy.env

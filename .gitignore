@@ -5,3 +5,4 @@ node_modules/
 qa/
 dist/
 coverage/
+deploy
