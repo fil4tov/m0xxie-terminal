@@ -12,6 +12,42 @@ describe("Terminal", () => {
     });
     fireEvent.submit(screen.getByRole("combobox").closest("form")!);
   };
+  it("focuses the command input on mount and restores focus after a background click", () => {
+    render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox");
+    expect(input).toHaveFocus();
+    fireEvent.change(input, { target: { value: "pi" } });
+    act(() => input.blur());
+    fireEvent.click(document.body);
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue("pi");
+  });
+  it("returns focus after a player control click without blocking its value change", () => {
+    render(
+      <>
+        <Terminal onListen={vi.fn()} />
+        <input type="range" aria-label="Громкость" defaultValue="50" />
+      </>,
+    );
+    const slider = screen.getByRole("slider");
+    act(() => slider.focus());
+    fireEvent.change(slider, { target: { value: "30" } });
+    fireEvent.click(slider);
+    expect(slider).toHaveValue("30");
+    expect(screen.getByRole("combobox")).toHaveFocus();
+  });
+  it("preserves the caret when clicking inside the command input", () => {
+    render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "ping" } });
+    act(() => {
+      input.focus();
+      input.setSelectionRange(2, 2);
+    });
+    fireEvent.click(input);
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(2);
+  });
   it("filters slash commands and supports keyboard completion", async () => {
     render(<Terminal onListen={vi.fn()} />);
     const input = screen.getByRole("combobox");

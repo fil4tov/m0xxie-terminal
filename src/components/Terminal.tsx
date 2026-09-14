@@ -118,6 +118,15 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
       if (chat.current) chat.current.scrollTop = chat.current.scrollHeight;
     }, [entries, showMenu, filtered.length]);
     useEffect(() => {
+      // Restore focus after clicks so controls finish handling their action first.
+      function focusInput() {
+        input.current?.focus({ preventScroll: true });
+      }
+      focusInput();
+      document.addEventListener("click", focusInput);
+      return () => document.removeEventListener("click", focusInput);
+    }, []);
+    useEffect(() => {
       function slash(event: globalThis.KeyboardEvent) {
         const target = event.target;
         if (

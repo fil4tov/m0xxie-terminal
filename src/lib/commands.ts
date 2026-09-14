@@ -22,6 +22,7 @@ export interface CommandResult {
 export function resolveCommand(raw: string): CommandResult {
   const name = raw.trim().toLowerCase().replace(/^\//, "");
   if (name === "pwd") return { text: window.location.href };
+  if (name === "ping") return { text: "pong" };
   if (name === "github" || name === "telegram")
     return { text: links[name].note, links: [links[name]] };
   if (name === "music")

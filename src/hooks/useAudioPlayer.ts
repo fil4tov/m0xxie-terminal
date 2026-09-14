@@ -1,6 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { tracks } from "../tracks";
 import { loadTrackDurations } from "../lib/loadTrackDurations";
+const VOLUME_STORAGE_KEY = "m0xxie-player-volume";
+const DEFAULT_VOLUME = 0.5;
+
+function readVolume() {
+  try {
+    const saved = localStorage.getItem(VOLUME_STORAGE_KEY);
+    if (saved !== null && saved.trim() !== "") {
+      const value = Number(saved);
+      if (Number.isFinite(value) && value >= 0 && value <= 1) return value;
+    }
+  } catch {
+    // Storage may be unavailable in this browser.
+  }
+  return DEFAULT_VOLUME;
+}
+
 export type TransportAction = "play" | "stop" | "previous" | "next";
 export function useAudioPlayer() {
   const audio = useRef<HTMLAudioElement | null>(null),
@@ -17,7 +33,7 @@ export function useAudioPlayer() {
     [playing, setPlaying] = useState(false),
     [position, setPosition] = useState(0),
     [duration, setDuration] = useState(0),
-    [volume, setVolumeState] = useState(0.65),
+    [volume, setVolumeState] = useState(readVolume),
     [error, setError] = useState("");
   const durationCache = useRef<(number | null)[]>(tracks.map(() => null));
   const [durations, setDurations] = useState(durationCache.current);
@@ -109,7 +125,7 @@ export function useAudioPlayer() {
     const element = new Audio();
     audio.current = element;
     element.preload = "metadata";
-    element.volume = 0.65;
+    element.volume = volume;
     const onPlay = () => setPlaying(true),
       onPause = () => setPlaying(false),
       onTime = () => setPosition(element.currentTime);
@@ -165,9 +181,15 @@ export function useAudioPlayer() {
     setPosition(element.currentTime);
   }
   function setVolume(value: number) {
+    if (!Number.isFinite(value)) return;
     const next = Math.max(0, Math.min(1, value));
     setVolumeState(next);
     if (audio.current) audio.current.volume = next;
+    try {
+      localStorage.setItem(VOLUME_STORAGE_KEY, String(next));
+    } catch {
+      // Volume controls must still work when storage is unavailable.
+    }
   }
   return {
     tracks,
