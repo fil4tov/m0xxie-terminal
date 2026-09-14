@@ -121,6 +121,77 @@ describe("audio transport", () => {
     vi.stubGlobal("Audio", TestAudio);
     vi.stubGlobal("AudioContext", TestAudioContext);
   });
+  it("restores saved order, skips missing or duplicate tracks, and appends new tracks", () => {
+    localStorage.setItem(
+      "m0xxie-player-track-order",
+      JSON.stringify([
+        library[2].src,
+        "/removed.mp3",
+        library[2].src,
+        library[0].src,
+      ]),
+    );
+    const { result } = renderHook(useAudioPlayer);
+    expect(result.current.tracks.map((track) => track.src)).toEqual([
+      library[2].src,
+      library[0].src,
+      library[1].src,
+    ]);
+    expect(result.current.index).toBe(0);
+    expect(result.current.track?.src).toBe(library[2].src);
+    expect(result.current.durations).toEqual([140.5, 120.5, 130.5]);
+    expect(TestAudio.sources).toEqual([]);
+  });
+  it("reorders without interrupting playback and advances in the saved order", async () => {
+    const { result, unmount } = renderHook(useAudioPlayer);
+    await act(async () => result.current.choose(1, true));
+    const media = TestAudio.instances[0];
+    act(() => {
+      media.currentTime = 35;
+      media.dispatchEvent(new Event("timeupdate"));
+    });
+    const sources = [...TestAudio.sources];
+    act(() => result.current.reorder(1, 0));
+    expect(result.current.index).toBe(0);
+    expect(result.current.track?.src).toBe(library[1].src);
+    expect(result.current.position).toBe(35);
+    expect(result.current.playing).toBe(true);
+    expect(media.paused).toBe(false);
+    expect(TestAudio.sources).toEqual(sources);
+    expect(result.current.durations).toEqual([240, 120.5, 140.5]);
+    expect(
+      JSON.parse(localStorage.getItem("m0xxie-player-track-order")!),
+    ).toEqual([library[1].src, library[0].src, library[2].src]);
+    await act(async () => media.dispatchEvent(new Event("ended")));
+    expect(result.current.track?.src).toBe(library[0].src);
+    await act(async () => result.current.transport("previous"));
+    expect(result.current.track?.src).toBe(library[1].src);
+    unmount();
+    const restored = renderHook(useAudioPlayer);
+    expect(restored.result.current.track?.src).toBe(library[1].src);
+  });
+  it("ignores malformed order and keeps reordering usable when storage is blocked", () => {
+    localStorage.setItem("m0xxie-player-track-order", "broken json");
+    const { result } = renderHook(useAudioPlayer);
+    expect(result.current.tracks).toEqual(library);
+    const save = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("Blocked");
+      });
+    try {
+      act(() => result.current.reorder(0, 2));
+      expect(result.current.tracks.map((track) => track.src)).toEqual([
+        library[1].src,
+        library[2].src,
+        library[0].src,
+      ]);
+      expect(result.current.track?.src).toBe(library[0].src);
+      expect(result.current.index).toBe(2);
+    } finally {
+      save.mockRestore();
+    }
+  });
   it("fades in, fades to silence before pausing, and keeps the user's volume", async () => {
     vi.useFakeTimers();
     const { result } = renderHook(useAudioPlayer);

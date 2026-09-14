@@ -2,8 +2,9 @@ import { useEffect, useRef } from "react";
 import type { AudioPlayer } from "../hooks/useAudioPlayer";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { CassetteScene } from "./CassetteScene";
+import { TrackList } from "./TrackList";
+import { formatTime as time } from "../lib/formatTime";
 import {
-  FiChevronRight,
   FiPause,
   FiPlay,
   FiSkipBack,
@@ -11,10 +12,6 @@ import {
   FiShuffle,
   FiX,
 } from "react-icons/fi";
-const time = (value: number | null | undefined) =>
-  value != null && Number.isFinite(value)
-    ? `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, "0")}`
-    : "--:--";
 export function PlayerPanel({
   player,
   onClose,
@@ -132,31 +129,7 @@ export function PlayerPanel({
           />
         </label>
       </div>
-      <div className="tracks" aria-label="Треки">
-        {player.tracks.map((track, i) => (
-          <button
-            key={track.src}
-            className="track"
-            onClick={() =>
-              player.index === i
-                ? player.transport("play")
-                : player.choose(i, true)
-            }
-            aria-pressed={player.index === i}
-            aria-label={`Выбрать ${track.title}`}
-          >
-            <span className="track-number">
-              {player.index === i ? (
-                <FiChevronRight aria-hidden="true" />
-              ) : (
-                String(i + 1).padStart(2, "0")
-              )}
-            </span>
-            <span>{track.title}</span>
-            <span>{time(player.durations[i])}</span>
-          </button>
-        ))}
-      </div>
+      <TrackList player={player} />
       {player.error && (
         <p id="audio-error" role="status">
           {player.error}

@@ -3,6 +3,25 @@ import { tracks } from "../tracks";
 import { createAudioFader } from "../lib/createAudioFader";
 const VOLUME_STORAGE_KEY = "m0xxie-player-volume";
 const DEFAULT_VOLUME = 0.5;
+const ORDER_STORAGE_KEY = "m0xxie-player-track-order";
+
+function readOrder() {
+  const fallback = tracks.map((_, i) => i);
+  try {
+    const saved: unknown = JSON.parse(
+      localStorage.getItem(ORDER_STORAGE_KEY) ?? "null",
+    );
+    if (!Array.isArray(saved)) return fallback;
+    const bySource = new Map(tracks.map((track, i) => [track.src, i]));
+    const ordered = saved.flatMap((src) => {
+      const index = typeof src === "string" ? bySource.get(src) : undefined;
+      return index === undefined ? [] : [index];
+    });
+    return [...new Set([...ordered, ...fallback])];
+  } catch {
+    return fallback;
+  }
+}
 
 function readVolume() {
   try {
@@ -19,8 +38,11 @@ function readVolume() {
 
 export type TransportAction = "play" | "stop" | "previous" | "next";
 export function useAudioPlayer(enabled = true) {
+  const [order, setOrder] = useState(readOrder);
+  // Media and shuffle keep stable library indices; only the displayed order moves.
+  const orderRef = useRef(order);
   const audio = useRef<HTMLAudioElement | null>(null),
-    indexRef = useRef(0),
+    indexRef = useRef(order[0] ?? 0),
     loadedIndex = useRef<number | null>(null),
     positionRef = useRef(0),
     wantsToPlay = useRef(false),
@@ -29,14 +51,14 @@ export function useAudioPlayer(enabled = true) {
   const shuffleState = useRef({
     enabled: false,
     remaining: [] as number[],
-    history: [0],
+    history: [order[0] ?? 0],
     cursor: 0,
   });
   const [shuffle, setShuffle] = useState(false);
-  const [index, setIndex] = useState(0),
+  const [index, setIndex] = useState(order[0] ?? 0),
     [playing, setPlaying] = useState(false),
     [position, setPosition] = useState(0),
-    [duration, setDuration] = useState(tracks[0]?.duration ?? 0),
+    [duration, setDuration] = useState(tracks[order[0]]?.duration ?? 0),
     [volume, setVolumeState] = useState(readVolume),
     [error, setError] = useState("");
   const volumeRef = useRef(volume);
@@ -140,14 +162,47 @@ export function useAudioPlayer(enabled = true) {
     setShuffle(state.enabled);
   }
   function choose(next: number, autoplay = false) {
-    loadTrack(next, autoplay);
+    const libraryIndex = orderRef.current[next];
+    if (libraryIndex === undefined) return;
+    loadTrack(libraryIndex, autoplay);
     resetShuffle(indexRef.current);
+  }
+  function reorder(from: number, to: number) {
+    const previous = orderRef.current;
+    if (
+      !Number.isInteger(from) ||
+      !Number.isInteger(to) ||
+      from === to ||
+      from < 0 ||
+      to < 0 ||
+      from >= previous.length ||
+      to >= previous.length
+    )
+      return;
+    const next = [...previous];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    orderRef.current = next;
+    setOrder(next);
+    try {
+      localStorage.setItem(
+        ORDER_STORAGE_KEY,
+        JSON.stringify(next.map((i) => tracks[i].src)),
+      );
+    } catch {
+      // Sorting remains available when browser storage is blocked or full.
+    }
   }
   function advance(direction: 1 | -1, autoplay: boolean) {
     if (!tracks.length) return;
     const state = shuffleState.current;
     if (!state.enabled) {
-      loadTrack(indexRef.current + direction, autoplay);
+      const ordered = orderRef.current;
+      const current = ordered.indexOf(indexRef.current);
+      loadTrack(
+        ordered[(current + direction + ordered.length) % ordered.length],
+        autoplay,
+      );
       return;
     }
     if (direction === -1) {
@@ -271,19 +326,20 @@ export function useAudioPlayer(enabled = true) {
     }
   }
   return {
-    tracks,
-    index,
+    tracks: order.map((i) => tracks[i]),
+    index: order.indexOf(index),
     track: tracks[index] ?? null,
     playing,
     position,
     duration,
-    durations,
+    durations: order.map((i) => durations[i]),
     volume,
     error,
     shuffle,
     toggleShuffle,
     transport,
     choose,
+    reorder,
     seek,
     setVolume,
     pause,
