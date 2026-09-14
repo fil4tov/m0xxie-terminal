@@ -1,0 +1,875 @@
+@font-face {
+  font-family: Terminal;
+  src: local("Cascadia Code"), local("Consolas");
+  font-display: swap;
+}
+:root {
+  font-family: Terminal, "Courier New", monospace;
+  color-scheme: dark;
+  --bg: #0d110f;
+  --panel: #111b15;
+  --screen: #0b150f;
+  --ink: #b4f5bb;
+  --muted: #74957d;
+  --line: #294332;
+  --accent: #b2ffbf;
+  --warm: #c6c8b5;
+  --surface: #1a241d;
+  --glow: rgba(122, 247, 146, 0.09);
+  --bodyfont: Terminal, "Courier New", monospace;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  min-height: 100svh;
+  transition:
+    background 0.45s,
+    color 0.3s;
+  font-family: var(--bodyfont);
+  font-size: 16px;
+}
+button,
+input,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  color: inherit;
+  cursor: pointer;
+}
+button {
+  border: 0;
+  background: none;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+a {
+  color: inherit;
+}
+button:hover {
+  color: var(--accent);
+}
+[hidden] {
+  display: none !important;
+}
+.noise {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.022;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.9' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+main {
+  width: min(1240px, 90vw);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 760px);
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  gap: 65px;
+  min-height: 530px;
+  transition: all 0.4s;
+}
+.terminal-shell {
+  width: 100%;
+  position: relative;
+  align-self: center;
+  transition: all 0.45s;
+}
+.terminal-bezel {
+  padding: 16px;
+  background: linear-gradient(145deg, #253027, #151c17 42%, #1d2820);
+  border: 1px solid #344238;
+  border-radius: 17px;
+  box-shadow:
+    0 25px 70px #0006,
+    inset 0 1px 1px #ffffff1a,
+    0 0 100px var(--glow);
+}
+.terminal-top {
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--screen);
+  border-radius: 7px 7px 0 0;
+  padding: 15px 23px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  gap: 14px;
+}
+.terminal-top > span:first-child {
+  color: var(--ink);
+}
+.terminal-top > span:nth-child(2) {
+  margin-left: auto;
+  font-size: 10px;
+}
+.terminal-top button {
+  font-size: 19px;
+  padding: 0 2px;
+}
+.status-light {
+  width: 5px;
+  height: 5px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 7px;
+  background: var(--accent);
+  box-shadow: 0 0 9px var(--accent);
+  border-radius: 50%;
+}
+.terminal-screen {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at center, #10261855, transparent 85%),
+    var(--screen);
+  padding: 22px 37px 21px;
+  border: 1px solid var(--line);
+  border-radius: 0 0 7px 7px;
+  box-shadow: inset 0 0 40px #0006;
+  min-height: 430px;
+  transition: min-height 380ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.terminal-screen:after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 2px,
+    #0002 2px,
+    #0002 3px
+  );
+  opacity: 0.5;
+}
+.boot {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  margin-bottom: 0;
+  transition: margin-bottom 380ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.boot-right {
+  color: var(--ink);
+  padding: 0;
+  letter-spacing: inherit;
+}
+.boot-right:hover {
+  text-shadow: 0 0 8px var(--accent);
+}
+.intro-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows 380ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 250ms ease,
+    visibility 0s;
+}
+.intro-collapse[data-expanded="false"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition-delay: 0s, 0s, 380ms;
+}
+.intro-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.intro {
+  margin: 40px 0 29px;
+}
+.eyebrow {
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0 0 15px;
+}
+h1 {
+  font-size: clamp(32px, 3.8vw, 50px);
+  line-height: 1.08;
+  letter-spacing: -0.055em;
+  margin: 0 0 20px;
+  font-weight: 400;
+  text-shadow: 0 0 18px #a6ffa52a;
+}
+.intro-copy {
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 0;
+  color: var(--ink);
+  opacity: 0.8;
+}
+.terminal-divider {
+  border-top: 1px dashed var(--line);
+  margin: 0 0 22px;
+}
+.input-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+.input-hint button {
+  background: var(--surface);
+  padding: 1px 7px;
+  color: var(--ink);
+  font-size: 14px;
+  border: 1px solid var(--line);
+}
+#command-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  position: relative;
+  z-index: 2;
+}
+.prompt-label {
+  white-space: nowrap;
+  font-size: 14px;
+}
+.prompt-label span:first-child {
+  color: var(--accent);
+}
+.prompt-path {
+  color: var(--muted);
+}
+.prompt-label b {
+  font-weight: 400;
+  color: var(--muted);
+}
+.prompt-label strong {
+  margin: 0 5px;
+  color: var(--accent);
+}
+.terminal-input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+#command-input {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font-size: 16px;
+  width: 100%;
+  min-width: 0;
+  caret-color: transparent;
+  outline: none;
+  padding: 5px 1ch 5px 0;
+  line-height: inherit;
+}
+.terminal-input-overlay {
+  position: absolute;
+  inset: 0;
+  padding: 5px 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre;
+}
+.terminal-input-track {
+  width: max-content;
+}
+.terminal-input-prefix {
+  visibility: hidden;
+}
+.terminal-input-caret {
+  color: var(--accent);
+  animation: blink 1.3s step-end infinite;
+}
+.enter-button {
+  font-size: 20px;
+  color: var(--muted);
+}
+#suggestions {
+  margin: 15px 0 4px;
+  border: 1px solid var(--line);
+  position: relative;
+  z-index: 2;
+}
+#suggestions button {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+  padding: 11px 14px;
+  text-align: left;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+#suggestions button:last-child {
+  border-bottom: 0;
+}
+#suggestions button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--accent);
+}
+#suggestions span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+#suggestions .no-results {
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.terminal-bottom {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  margin-top: 37px;
+  opacity: 0.7;
+}
+.tiny-square {
+  margin-right: 5px;
+  color: var(--accent);
+}
+.bottom-separator {
+  margin: 0 8px;
+}
+.history-entry {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.history-command {
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.history-command > svg {
+  color: var(--accent);
+}
+.history-response {
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+.history-response a {
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+}
+.history-response a:hover {
+  color: var(--accent);
+}
+.history-entry.typing .history-response:after {
+  content: "▌";
+  animation: blink 0.7s step-end infinite;
+}
+#history {
+  max-height: 260px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.app.listening main {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+  gap: 55px;
+}
+.app.listening .terminal-screen {
+  padding: 23px 27px;
+}
+.app.listening h1 {
+  font-size: 38px;
+}
+.app.listening .intro {
+  margin-top: 35px;
+}
+.app.listening .eyebrow {
+  font-size: 9px;
+}
+.app.listening .terminal-top {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.player-panel {
+  min-width: 0;
+  animation: appear 0.8s both;
+}
+.player-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  padding: 0 7px;
+}
+.player-heading > button {
+  font-size: 26px;
+  line-height: 1;
+  opacity: 0.7;
+}
+.device-stage {
+  height: 330px;
+  position: relative;
+  margin: 10px -15px 0;
+}
+.device-halo {
+  position: absolute;
+  inset: 20% 14%;
+  border-radius: 50%;
+  background: var(--glow);
+  filter: blur(40px);
+  pointer-events: none;
+}
+#player-canvas {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: pan-y;
+}
+#player-canvas:active {
+  cursor: grabbing;
+}
+#player-canvas canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.device-side-label {
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  writing-mode: vertical-rl;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.device-hint {
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+  margin: 3px 0 26px;
+}
+.now-playing {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.tape-side {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  padding: 11px 9px;
+  color: var(--muted);
+}
+.tape-side i {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border: 1px solid var(--muted);
+  margin-left: 7px;
+  border-radius: 50%;
+}
+.now-playing > div:nth-child(2) {
+  min-width: 0;
+}
+.now-playing p {
+  margin: 0;
+}
+#track-title {
+  font-size: 15px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 290px;
+}
+#track-artist {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.equalizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 22px;
+  margin-left: auto;
+}
+.equalizer i {
+  width: 3px;
+  background: var(--accent);
+  height: 3px;
+  transition: height 0.2s;
+}
+.app.playing .equalizer i {
+  animation: level 0.6s ease-in-out infinite alternate;
+}
+.equalizer i:nth-child(2) {
+  animation-delay: -0.3s !important;
+}
+.equalizer i:nth-child(3) {
+  animation-delay: -0.15s !important;
+}
+.equalizer i:nth-child(4) {
+  animation-delay: -0.45s !important;
+}
+.seek-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 14px;
+  font-size: 10px;
+  color: var(--muted);
+}
+input[type="range"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  height: 3px;
+  min-width: 0;
+}
+#seek {
+  width: 100%;
+  flex: 1;
+}
+.transport {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.transport > div {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.transport button {
+  font-family: Arial, sans-serif;
+  font-size: 17px;
+  width: 38px;
+  height: 37px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  transition:
+    transform 0.15s,
+    background 0.15s;
+}
+.transport button:active {
+  transform: translateY(2px);
+}
+.transport .play-button {
+  width: 53px;
+  background: var(--surface);
+  color: var(--accent);
+}
+.volume-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 9px;
+  color: var(--muted);
+}
+#volume {
+  width: 80px;
+}
+.tracks {
+  margin-top: 23px;
+  border-top: 1px solid var(--line);
+}
+.track {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 12px 2px;
+  text-align: left;
+  font-size: 12px;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.track-number {
+  color: var(--muted);
+  font-size: 10px;
+}
+.track > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track > span:last-child {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.track[aria-pressed="true"] {
+  color: var(--accent);
+}
+.track[aria-pressed="true"] .track-number {
+  color: var(--accent);
+}
+#audio-error {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes level {
+  from {
+    height: 4px;
+  }
+  to {
+    height: 22px;
+  }
+}
+@media (min-width: 1550px) {
+  main {
+    min-height: 580px;
+  }
+  .terminal-screen {
+    min-height: 460px;
+  }
+  .intro {
+    margin-top: 50px;
+  }
+}
+@media (max-width: 1100px) {
+  main {
+    width: 91vw;
+  }
+  .app.listening main {
+    gap: 28px !important;
+  }
+  .app.listening .terminal-screen {
+    padding: 22px !important;
+  }
+  .app.listening .terminal-top > span:nth-child(2) {
+    display: none;
+  }
+  .app.listening h1 {
+    font-size: 32px;
+  }
+  .player-panel {
+    padding-left: 0 !important;
+    border: 0 !important;
+  }
+  .device-stage {
+    height: 295px !important;
+  }
+  #track-title {
+    max-width: 200px;
+  }
+}
+@media (max-width: 760px) {
+  main,
+  .app.listening main {
+    width: calc(100% - 30px);
+    display: flex;
+    flex-direction: column;
+    gap: 38px !important;
+    min-height: 0;
+  }
+  main .terminal-shell {
+    width: 100%;
+  }
+  .terminal-bezel {
+    padding: 9px;
+    border-radius: 12px;
+  }
+  .terminal-top {
+    padding: 13px !important;
+    font-size: 9px;
+  }
+  .terminal-top > span:nth-child(2) {
+    font-size: 8px;
+    letter-spacing: 0;
+  }
+  .terminal-screen,
+  .app.listening .terminal-screen {
+    padding: 22px 19px !important;
+    min-height: 410px;
+  }
+  .boot {
+    font-size: 8px;
+  }
+  .intro {
+    margin: 35px 0 25px;
+  }
+  .eyebrow,
+  .app.listening .eyebrow {
+    font-size: 8px;
+    line-height: 1.7;
+  }
+  h1,
+  .app.listening h1 {
+    font-size: 34px;
+  }
+  .intro-copy {
+    font-size: 12px;
+  }
+  .input-hint {
+    font-size: 11px;
+  }
+  .prompt-label {
+    font-size: 12px;
+    letter-spacing: -0.03em;
+  }
+  #command-form {
+    gap: 5px;
+  }
+  #command-input {
+    font-size: 16px;
+  }
+  #suggestions button {
+    font-size: 12px;
+    padding: 12px 10px;
+    gap: 5px;
+  }
+  #suggestions span {
+    font-size: 10px;
+  }
+  .terminal-bottom {
+    font-size: 7px;
+    letter-spacing: 0.03em;
+  }
+  .player-panel {
+    width: 100%;
+    max-width: 460px;
+    padding: 0 10px !important;
+  }
+  .device-stage {
+    height: 320px !important;
+    margin: 10px -15px 0;
+  }
+  .device-hint {
+    font-size: 9px;
+  }
+  .device-side-label {
+    right: 5px;
+  }
+  .now-playing {
+    gap: 10px;
+  }
+  #track-title {
+    max-width: 220px;
+    font-size: 14px;
+  }
+  .player-heading {
+    font-size: 10px;
+  }
+  .transport button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .player-heading > button {
+    width: 44px;
+    height: 44px;
+  }
+  #tracks .track {
+    min-height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *:before,
+  *:after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.terminal-shell .terminal-screen[data-intro-collapsed="true"] {
+  min-height: 0;
+}
+.terminal-screen[data-intro-collapsed="true"] .boot {
+  margin-bottom: 24px;
+}
+.app {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+.app main {
+  flex: 1;
+  padding-block: 45px;
+}
+.scene-fallback {
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 50px 20px;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .app main {
+    padding-block: 25px;
+  }
+}
+
+svg {
+  display: inline-block;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+}
+.terminal-top button,
+.enter-button,
+.player-heading > button,
+.transport button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#suggestions button > svg {
+  width: 1.15em;
+  height: 1.15em;
+}
+.external-link-icon {
+  margin-left: 0.45em;
+}
+.tiny-square {
+  width: 0.55em;
+  height: 0.55em;
+  fill: currentColor;
+}

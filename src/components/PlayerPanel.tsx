@@ -1,0 +1,152 @@
+import { useEffect, useRef } from "react";
+import { tracks } from "../config";
+import type { AudioPlayer } from "../hooks/useAudioPlayer";
+import { useReducedMotion } from "../hooks/useReducedMotion";
+import { CassetteScene } from "./CassetteScene";
+import {
+  FiChevronRight,
+  FiPause,
+  FiPlay,
+  FiSkipBack,
+  FiSkipForward,
+  FiX,
+} from "react-icons/fi";
+const time = (value: number) =>
+  Number.isFinite(value)
+    ? `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, "0")}`
+    : "0:00";
+export function PlayerPanel({
+  player,
+  onClose,
+}: {
+  player: AudioPlayer;
+  onClose: () => void;
+}) {
+  const panel = useRef<HTMLElement>(null),
+    reduced = useReducedMotion();
+  useEffect(() => {
+    if (window.innerWidth < 761)
+      panel.current?.scrollIntoView({
+        behavior: reduced ? "instant" : "smooth",
+        block: "start",
+      });
+  }, [reduced]);
+  return (
+    <section ref={panel} className="player-panel" aria-label="Кассетный плеер">
+      <div className="player-heading">
+        <span>
+          <i className="status-light" />
+          {player.playing ? "NOW PLAYING" : "TAPE LOADED"}
+        </span>
+        <button onClick={onClose} aria-label="Закрыть плеер">
+          <FiX aria-hidden="true" />
+        </button>
+      </div>
+      <div className="device-stage">
+        <div className="device-halo" aria-hidden="true" />
+        <CassetteScene playing={player.playing} onAction={player.transport} />
+        <span className="device-side-label" aria-hidden="true">
+          PORTABLE STEREO / MX–90
+        </span>
+      </div>
+      <p className="device-hint">Поверни плеер · нажми кнопку на корпусе</p>
+      <div className="now-playing">
+        <span className="tape-side">
+          SIDE A <i />
+        </span>
+        <div>
+          <p id="track-title">{player.track.title}</p>
+          <p id="track-artist">{player.track.artist} / PERSONAL TAPES</p>
+        </div>
+        <div className="equalizer" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+      </div>
+      <div className="seek-row">
+        <span>{time(player.position)}</span>
+        <input
+          id="seek"
+          type="range"
+          min="0"
+          max={player.duration || 1}
+          step="0.1"
+          value={Math.min(player.position, player.duration)}
+          onChange={(event) => player.seek(Number(event.target.value))}
+          aria-label="Позиция воспроизведения"
+          aria-valuetext={`${time(player.position)} из ${time(player.duration)}`}
+        />
+        <span>{time(player.duration)}</span>
+      </div>
+      <div className="transport">
+        <div>
+          <button
+            onClick={() => player.transport("previous")}
+            aria-label="Предыдущий трек"
+          >
+            <FiSkipBack aria-hidden="true" />
+          </button>
+          <button
+            onClick={() => player.transport("play")}
+            className="play-button"
+            aria-label={player.playing ? "Пауза" : "Воспроизвести"}
+          >
+            {player.playing ? (
+              <FiPause aria-hidden="true" />
+            ) : (
+              <FiPlay aria-hidden="true" />
+            )}
+          </button>
+          <button
+            onClick={() => player.transport("next")}
+            aria-label="Следующий трек"
+          >
+            <FiSkipForward aria-hidden="true" />
+          </button>
+        </div>
+        <label className="volume-label">
+          <span>VOL</span>
+          <input
+            id="volume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={player.volume}
+            onChange={(event) => player.setVolume(Number(event.target.value))}
+            aria-label="Громкость"
+          />
+        </label>
+      </div>
+      <div className="tracks" aria-label="Треки">
+        {tracks.map((track, i) => (
+          <button
+            key={track.src}
+            className="track"
+            onClick={() => player.choose(i)}
+            aria-pressed={player.index === i}
+            aria-label={`Слушать ${track.title}`}
+          >
+            <span className="track-number">
+              {player.index === i ? (
+                <FiChevronRight aria-hidden="true" />
+              ) : (
+                String(i + 1).padStart(2, "0")
+              )}
+            </span>
+            <span>{track.title}</span>
+            <span>{time(player.durations[i])}</span>
+          </button>
+        ))}
+      </div>
+      {player.error && (
+        <p id="audio-error" role="status">
+          {player.error}
+        </p>
+      )}
+    </section>
+  );
+}
