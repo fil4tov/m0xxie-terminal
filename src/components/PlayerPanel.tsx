@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { tracks } from "../config";
 import type { AudioPlayer } from "../hooks/useAudioPlayer";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { CassetteScene } from "./CassetteScene";
@@ -12,10 +11,10 @@ import {
   FiShuffle,
   FiX,
 } from "react-icons/fi";
-const time = (value: number) =>
-  Number.isFinite(value)
+const time = (value: number | null | undefined) =>
+  value != null && Number.isFinite(value)
     ? `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, "0")}`
-    : "0:00";
+    : "--:--";
 export function PlayerPanel({
   player,
   onClose,
@@ -53,8 +52,8 @@ export function PlayerPanel({
       <p className="device-hint">Поверни плеер · нажми кнопку на корпусе</p>
       <div className="now-playing">
         <div>
-          <p id="track-title">{player.track.title}</p>
-          <p id="track-artist">{player.track.artist} / PERSONAL TAPES</p>
+          <p id="track-title">{player.track?.title ?? "Пока нет треков"}</p>
+          <p id="track-artist">m0xxie / PERSONAL TAPES</p>
         </div>
         <div className="equalizer" aria-hidden="true">
           <i />
@@ -68,6 +67,7 @@ export function PlayerPanel({
         <span>{time(player.position)}</span>
         <input
           id="seek"
+          disabled={!player.duration}
           type="range"
           min="0"
           max={player.duration || 1}
@@ -77,17 +77,19 @@ export function PlayerPanel({
           aria-label="Позиция воспроизведения"
           aria-valuetext={`${time(player.position)} из ${time(player.duration)}`}
         />
-        <span>{time(player.duration)}</span>
+        <span>{time(player.durations[player.index])}</span>
       </div>
       <div className="transport">
         <div>
           <button
+            disabled={!player.track}
             onClick={() => player.transport("previous")}
             aria-label="Предыдущий трек"
           >
             <FiSkipBack aria-hidden="true" />
           </button>
           <button
+            disabled={!player.track}
             onClick={() => player.transport("play")}
             className="play-button"
             aria-label={player.playing ? "Пауза" : "Воспроизвести"}
@@ -99,12 +101,14 @@ export function PlayerPanel({
             )}
           </button>
           <button
+            disabled={!player.track}
             onClick={() => player.transport("next")}
             aria-label="Следующий трек"
           >
             <FiSkipForward aria-hidden="true" />
           </button>
           <button
+            disabled={player.tracks.length < 2}
             onClick={player.toggleShuffle}
             className="shuffle-button"
             aria-label="Случайный порядок"
@@ -129,7 +133,7 @@ export function PlayerPanel({
         </label>
       </div>
       <div className="tracks" aria-label="Треки">
-        {tracks.map((track, i) => (
+        {player.tracks.map((track, i) => (
           <button
             key={track.src}
             className="track"

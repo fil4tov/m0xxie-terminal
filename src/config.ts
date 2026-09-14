@@ -1,43 +1,30 @@
-export interface ProfileLink {
-  url: string;
+export interface ExternalLink {
+  url?: string;
   label: string;
+}
+export interface ProfileLink extends ExternalLink {
+  url: string;
   note: string;
 }
-export interface Track {
-  title: string;
-  artist: string;
-  src: string;
-  duration: number;
-}
-export const links: Record<"github" | "bandcamp", ProfileLink> = {
+export const links: Record<"github" | "telegram", ProfileLink> = {
   github: {
-    url: "https://github.com/",
-    label: "github.com",
-    note: "Демоссылка — персональный профиль будет здесь.",
+    url: "https://github.com/fil4tov",
+    label: "github.com/fil4tov",
+    note: "Мой GitHub — код и проекты.",
   },
-  bandcamp: {
-    url: "https://bandcamp.com/",
-    label: "bandcamp.com",
-    note: "Демоссылка — страница артиста будет здесь.",
+  telegram: {
+    url: "https://t.me/fil4tov",
+    label: "Telegram",
+    note: "Мой Telegram:",
   },
 };
-export const tracks: readonly Track[] = [
+
+export const musicLinks: ExternalLink[] = [
+  { label: "Яндекс Музыка", url: "https://music.yandex.ru/artist/25391727" },
   {
-    title: "better",
-    artist: "m0xxie",
-    src: "/audio/m0xxie - better.mp3",
-    duration: 240,
+    label: "Spotify",
+    url: "https://open.spotify.com/artist/11VLjSogr033zIysRwNTNy",
   },
-  {
-    title: "free my mind",
-    artist: "m0xxie",
-    src: "/audio/m0xxie - free my mind.wav",
-    duration: 215,
-  },
-  {
-    title: "voyage",
-    artist: "m0xxie",
-    src: "/audio/m0xxie - voyage.mp3",
-    duration: 357,
-  },
+  { label: "VK Музыка", url: "https://vk.ru/artist/4345114337870066697" },
+  { label: "Звук", url: "https://zvuk.com/artist/214086011" },
 ];

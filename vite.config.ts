@@ -1,8 +1,9 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { audioLibraryPlugin } from "./src/plugins/audioLibraryPlugin.ts";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), audioLibraryPlugin()],
   optimizeDeps: {
     include: ["three/addons/geometries/RoundedBoxGeometry.js"],
   },

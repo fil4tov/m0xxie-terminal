@@ -173,8 +173,6 @@ main {
 .terminal-input-dock {
   margin-inline: calc(-1 * var(--screen-inset));
   padding-inline: var(--screen-inset);
-  scrollbar-width: thin;
-  scrollbar-gutter: stable both-edges;
 }
 .terminal-input-dock {
   flex-shrink: 0;
@@ -188,7 +186,10 @@ main {
   overflow-x: hidden;
   overscroll-behavior: contain;
   overflow-anchor: none;
-  scrollbar-color: var(--line) transparent;
+  scrollbar-width: none;
+}
+.terminal-chat::-webkit-scrollbar {
+  display: none;
 }
 .boot,
 .terminal-bottom {
@@ -359,7 +360,8 @@ h1 {
   background: var(--screen);
   color: var(--ink);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-inline: 0;
+  border-radius: 0;
   overflow: hidden;
 }
 .suggestions-caption {

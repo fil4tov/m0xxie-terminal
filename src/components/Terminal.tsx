@@ -89,7 +89,11 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
       if (!active) return;
       const entry = active;
       const length =
-        entry.text.length + (entry.link ? 1 + entry.link.label.length : 0);
+        entry.text.length +
+        (entry.links ?? []).reduce(
+          (length, link) => length + 1 + link.label.length,
+          0,
+        );
       let visible = entry.visible;
       const timer = window.setInterval(
         () => {
@@ -232,27 +236,10 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
                     </div>
                     <div className="history-response">
                       {entry.text.slice(0, entry.visible)}
-                      {entry.link && entry.visible > entry.text.length && (
-                        <>
-                          {"\n"}
-                          <a
-                            href={entry.link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {entry.link.label.slice(
-                              0,
-                              entry.visible - entry.text.length - 1,
-                            )}
-                            {entry.done && (
-                              <FiExternalLink
-                                className="external-link-icon"
-                                aria-hidden="true"
-                              />
-                            )}
-                          </a>
-                        </>
-                      )}
+                      <ResponseLinks
+                        links={entry.links}
+                        visible={entry.visible - entry.text.length}
+                      />
                     </div>
                   </div>
                 ))}
@@ -377,3 +364,42 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
     );
   },
 );
+
+function ResponseLinks({
+  links = [],
+  visible,
+}: {
+  links?: CommandResult["links"];
+  visible: number;
+}) {
+  let offset = 0;
+  return links.map((link) => {
+    offset += 1;
+    const count = Math.max(0, Math.min(link.label.length, visible - offset));
+    offset += link.label.length;
+    if (!count) return null;
+    return (
+      <span key={link.url ?? link.label}>
+        {"\n"}
+        {link.url ? (
+          <a href={link.url} target="_blank" rel="noopener noreferrer">
+            {link.label.slice(0, count)}
+            {count === link.label.length && (
+              <FiExternalLink
+                className="external-link-icon"
+                aria-hidden="true"
+              />
+            )}
+          </a>
+        ) : (
+          <span
+            className="pending-music-link"
+            title="Ссылка на профиль пока не добавлена"
+          >
+            {link.label.slice(0, count)}
+          </span>
+        )}
+      </span>
+    );
+  });
+}

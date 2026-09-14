@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Terminal } from "./Terminal";
+import { links, musicLinks } from "../config";
 
 describe("Terminal", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -16,10 +17,10 @@ describe("Terminal", () => {
     const input = screen.getByRole("combobox");
     fireEvent.change(input, { target: { value: "/" } });
     await act(async () => {});
-    expect(screen.getAllByRole("option")).toHaveLength(5);
+    expect(screen.getAllByRole("option")).toHaveLength(6);
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Tab" });
-    expect(input).toHaveValue("/bandcamp");
+    expect(input).toHaveValue("/telegram");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
   it("opens suggestions above the input inside the chat and scrolls only the chat", async () => {
@@ -58,7 +59,7 @@ describe("Terminal", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(3000));
     expect(
-      screen.getByRole("link", { name: "github.com" }),
+      screen.getByRole("link", { name: "github.com/fil4tov" }),
     ).toBeInTheDocument();
   });
   it("retains closing suggestions for animation and handles immediate reopening", () => {
@@ -75,17 +76,81 @@ describe("Terminal", () => {
     fireEvent.change(input, { target: { value: "/" } });
     expect(screen.getByRole("listbox")).toBe(menu);
     expect(menu.closest("[inert]")).toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(5);
+    expect(screen.getAllByRole("option")).toHaveLength(6);
   });
   it("types the GitHub response before exposing the complete link", async () => {
     render(<Terminal onListen={vi.fn()} />);
     submit("/github");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(3000));
-    expect(screen.getByRole("link", { name: "github.com" })).toHaveAttribute(
-      "href",
-      "https://github.com/",
+    expect(
+      screen.getByRole("link", { name: "github.com/fil4tov" }),
+    ).toHaveAttribute("href", "https://github.com/fil4tov");
+  });
+  it("supports a Telegram placeholder and uses the configured profile link", async () => {
+    const originalUrl = links.telegram.url;
+    try {
+      links.telegram.url = "";
+      render(<Terminal onListen={vi.fn()} />);
+      submit("/telegram");
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(screen.getByRole("log")).toHaveTextContent("Мой Telegram:");
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+      submit("/clear");
+      links.telegram.url = "https://example.com/telegram-profile";
+      submit("/telegram");
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(screen.getByRole("link", { name: "Telegram" })).toHaveAttribute(
+        "href",
+        links.telegram.url,
+      );
+    } finally {
+      links.telegram.url = originalUrl;
+    }
+  });
+  it("prints music links sequentially with each platform's own address", async () => {
+    const original = musicLinks.splice(
+      0,
+      musicLinks.length,
+      { label: "Spotify", url: "https://example.com/spotify-artist" },
+      { label: "Яндекс Музыка", url: "https://example.com/yandex-artist" },
     );
+    try {
+      render(<Terminal onListen={vi.fn()} />);
+      submit("/music");
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(400));
+      expect(screen.getAllByRole("link")).toHaveLength(1);
+      expect(screen.getByRole("link")).not.toHaveTextContent("Spotify");
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(screen.getByRole("link", { name: "Spotify" })).toHaveAttribute(
+        "href",
+        "https://example.com/spotify-artist",
+      );
+      expect(
+        screen.getByRole("link", { name: "Яндекс Музыка" }),
+      ).toHaveAttribute("href", "https://example.com/yandex-artist");
+    } finally {
+      musicLinks.splice(0, musicLinks.length, ...original);
+    }
+  });
+  it("displays platforms with missing URLs without creating empty links", async () => {
+    const original = musicLinks.splice(
+      0,
+      musicLinks.length,
+      { label: "Spotify", url: "" },
+      { label: "Звук", url: "" },
+    );
+    try {
+      render(<Terminal onListen={vi.fn()} />);
+      submit("/music");
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(screen.getByRole("log")).toHaveTextContent("Spotify");
+      expect(screen.getByRole("log")).toHaveTextContent("Звук");
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    } finally {
+      musicLinks.splice(0, musicLinks.length, ...original);
+    }
   });
   it("opens the player after the response and cancels queued work on clear", async () => {
     const onListen = vi.fn();

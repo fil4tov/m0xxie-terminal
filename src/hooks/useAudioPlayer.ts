@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { tracks } from "../config";
+import { tracks } from "../tracks";
+import { loadTrackDurations } from "../lib/loadTrackDurations";
 export type TransportAction = "play" | "stop" | "previous" | "next";
 export function useAudioPlayer() {
   const audio = useRef<HTMLAudioElement | null>(null),
@@ -15,15 +16,22 @@ export function useAudioPlayer() {
   const [index, setIndex] = useState(0),
     [playing, setPlaying] = useState(false),
     [position, setPosition] = useState(0),
-    [duration, setDuration] = useState(tracks[0].duration),
+    [duration, setDuration] = useState(0),
     [volume, setVolumeState] = useState(0.65),
     [error, setError] = useState("");
-  const [durations, setDurations] = useState(
-    tracks.map((track) => track.duration),
-  );
+  const durationCache = useRef<(number | null)[]>(tracks.map(() => null));
+  const [durations, setDurations] = useState(durationCache.current);
+  function rememberDuration(index: number, value: number) {
+    if (!Number.isFinite(value) || value <= 0) return;
+    durationCache.current = durationCache.current.map((duration, i) =>
+      i === index ? value : duration,
+    );
+    setDurations(durationCache.current);
+    if (index === indexRef.current) setDuration(value);
+  }
   async function play() {
     const element = audio.current;
-    if (!element) return;
+    if (!element || !tracks.length) return;
     const token = ++request.current;
     try {
       await element.play();
@@ -44,14 +52,14 @@ export function useAudioPlayer() {
   }
   function loadTrack(next: number, autoplay = true) {
     const element = audio.current;
-    if (!element) return;
+    if (!element || !tracks.length || !Number.isInteger(next)) return;
     ++request.current;
     element.pause();
     indexRef.current = (next + tracks.length) % tracks.length;
     const track = tracks[indexRef.current];
     setIndex(indexRef.current);
     setPosition(0);
-    setDuration(track.duration);
+    setDuration(durationCache.current[indexRef.current] ?? 0);
     setError("");
     element.src = track.src;
     element.load();
@@ -74,6 +82,7 @@ export function useAudioPlayer() {
     resetShuffle(indexRef.current);
   }
   function advance(direction: 1 | -1, autoplay: boolean) {
+    if (!tracks.length) return;
     const state = shuffleState.current;
     if (!state.enabled) {
       loadTrack(indexRef.current + direction, autoplay);
@@ -96,6 +105,7 @@ export function useAudioPlayer() {
     loadTrack(state.history[state.cursor], autoplay);
   }
   useEffect(() => {
+    if (!tracks.length) return;
     const element = new Audio();
     audio.current = element;
     element.preload = "metadata";
@@ -104,13 +114,7 @@ export function useAudioPlayer() {
       onPause = () => setPlaying(false),
       onTime = () => setPosition(element.currentTime);
     const onMetadata = () => {
-      if (!Number.isFinite(element.duration)) return;
-      setDuration(element.duration);
-      setDurations((previous) =>
-        previous.map((value, i) =>
-          i === indexRef.current ? element.duration : value,
-        ),
-      );
+      rememberDuration(indexRef.current, element.duration);
     };
     const onEnd = () => advance(1, true);
     const onError = () =>
@@ -138,6 +142,7 @@ export function useAudioPlayer() {
       audio.current = null;
     };
   }, []);
+  useEffect(() => loadTrackDurations(tracks, rememberDuration), []);
   function transport(action: TransportAction) {
     const element = audio.current;
     if (!element) return;
@@ -165,8 +170,9 @@ export function useAudioPlayer() {
     if (audio.current) audio.current.volume = next;
   }
   return {
+    tracks,
     index,
-    track: tracks[index],
+    track: tracks[index] ?? null,
     playing,
     position,
     duration,

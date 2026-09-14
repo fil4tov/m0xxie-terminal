@@ -1,23 +1,36 @@
-import { links, type ProfileLink } from "../config";
-import { FiHelpCircle, FiMusic, FiRotateCcw } from "react-icons/fi";
-import { SiBandcamp, SiGithub } from "react-icons/si";
+import { links, musicLinks, type ExternalLink } from "../config";
+import {
+  FiHeadphones,
+  FiHelpCircle,
+  FiMusic,
+  FiRotateCcw,
+} from "react-icons/fi";
+import { SiGithub, SiTelegram } from "react-icons/si";
 export const commands = [
   { name: "github", description: "Код и проекты", Icon: SiGithub },
-  { name: "bandcamp", description: "Релизы и музыка", Icon: SiBandcamp },
+  { name: "telegram", description: "Мой Telegram", Icon: SiTelegram },
+  { name: "music", description: "Музыка на площадках", Icon: FiHeadphones },
   { name: "listen", description: "Включить кассетный плеер", Icon: FiMusic },
   { name: "help", description: "Все команды", Icon: FiHelpCircle },
   { name: "clear", description: "Очистить терминал", Icon: FiRotateCcw },
 ] as const;
 export interface CommandResult {
   text: string;
-  link?: ProfileLink;
+  links?: readonly ExternalLink[];
   action?: "listen" | "clear";
 }
 export function resolveCommand(raw: string): CommandResult {
   const name = raw.trim().toLowerCase().replace(/^\//, "");
   if (name === "pwd") return { text: window.location.href };
-  if (name === "github" || name === "bandcamp")
-    return { text: links[name].note, link: links[name] };
+  if (name === "github" || name === "telegram")
+    return { text: links[name].note, links: [links[name]] };
+  if (name === "music")
+    return {
+      text: musicLinks.length
+        ? "Моя музыка на площадках:"
+        : "Ссылки на музыкальные площадки скоро появятся.\nА пока послушай треки через /listen.",
+      links: [...musicLinks],
+    };
   if (name === "clear") return { text: "", action: "clear" };
   if (name === "listen")
     return {
@@ -26,7 +39,7 @@ export function resolveCommand(raw: string): CommandResult {
     };
   if (name === "help")
     return {
-      text: "Доступные команды:\n/github    — код и проекты\n/bandcamp  — релизы и музыка\n/listen    — кассетный плеер\n/clear     — очистить экран\n\n↑ ↓ выбрать · Tab дополнить · Enter выполнить",
+      text: "Доступные команды:\n/github    — код и проекты\n/telegram  — мой Telegram\n/music     — музыка на площадках\n/listen    — кассетный плеер\n/clear     — очистить экран\n\n↑ ↓ выбрать · Tab дополнить · Enter выполнить",
     };
   return {
     text: `Команда «${raw}» не найдена.\nВведи /, чтобы увидеть доступные команды.`,
