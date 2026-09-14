@@ -15,6 +15,7 @@ export interface CommandResult {
 }
 export function resolveCommand(raw: string): CommandResult {
   const name = raw.trim().toLowerCase().replace(/^\//, "");
+  if (name === "pwd") return { text: window.location.href };
   if (name === "github" || name === "bandcamp")
     return { text: links[name].note, link: links[name] };
   if (name === "clear") return { text: "", action: "clear" };

@@ -2,6 +2,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -9,6 +10,8 @@ import {
 import { commands, resolveCommand, type CommandResult } from "../lib/commands";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { TerminalInput } from "./TerminalInput";
+import { CommandSuggestions } from "./CommandSuggestions";
+import { AnimatedGreeting } from "./AnimatedGreeting";
 import {
   FiChevronRight,
   FiCornerDownLeft,
@@ -32,12 +35,11 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
   function Terminal({ onListen }, ref) {
     const [value, setValue] = useState(""),
       [menu, setMenu] = useState(false),
-      [introExpanded, setIntroExpanded] = useState(true),
       [selected, setSelected] = useState(0),
       [entries, setEntries] = useState<Entry[]>([]);
     const input = useRef<HTMLInputElement>(null),
-      prompt = useRef<HTMLDivElement>(null),
-      log = useRef<HTMLDivElement>(null);
+      chat = useRef<HTMLDivElement>(null),
+      prompt = useRef<HTMLDivElement>(null);
     const counter = useRef(0),
       history = useRef<string[]>([]),
       historyIndex = useRef(0),
@@ -108,9 +110,9 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
       return () => window.clearInterval(timer);
       // The active entry owns one timer; character updates must not restart it.
     }, [active?.id, reduced]);
-    useEffect(() => {
-      if (log.current) log.current.scrollTop = log.current.scrollHeight;
-    }, [entries]);
+    useLayoutEffect(() => {
+      if (chat.current) chat.current.scrollTop = chat.current.scrollHeight;
+    }, [entries, showMenu, filtered.length]);
     useEffect(() => {
       function slash(event: globalThis.KeyboardEvent) {
         const target = event.target;
@@ -128,10 +130,15 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
         setValue("/");
         setSelected(0);
         setMenu(true);
-        input.current?.focus();
+        input.current?.focus({ preventScroll: true });
       }
       function outside(event: PointerEvent) {
-        if (!prompt.current?.contains(event.target as Node)) setMenu(false);
+        const target = event.target as Node;
+        if (
+          !prompt.current?.contains(target) &&
+          !input.current?.form?.contains(target)
+        )
+          setMenu(false);
       }
       document.addEventListener("keydown", slash);
       document.addEventListener("pointerdown", outside);
@@ -185,109 +192,123 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
               <FiRotateCcw aria-hidden="true" />
             </button>
           </div>
-          <div
-            className="terminal-screen"
-            data-intro-collapsed={!introExpanded}
-          >
+          <div className="terminal-screen">
             <div className="boot">
               <span>CONNECTION ESTABLISHED</span>
-              <button
-                type="button"
-                className="boot-right"
-                aria-expanded={introExpanded}
-                aria-controls="terminal-intro"
-                aria-label={
-                  introExpanded
-                    ? "Свернуть приветствие"
-                    : "Развернуть приветствие"
-                }
-                onClick={() => setIntroExpanded((expanded) => !expanded)}
-              >
-                [ OK ]
-              </button>
             </div>
             <div
-              id="terminal-intro"
-              className="intro-collapse"
-              data-expanded={introExpanded}
-              aria-hidden={!introExpanded}
-              inert={!introExpanded}
+              className="terminal-chat"
+              ref={chat}
+              role="region"
+              aria-label="Чат терминала"
             >
-              <div className="intro-clip">
-                <div className="intro">
-                  <p className="eyebrow">
-                    YOU FOUND MY LITTLE CORNER OF THE INTERNET.
-                  </p>
-                  <h1>hello, world</h1>
-                  <p className="intro-copy">
-                    Я m0xxie. Делаю музыку, пишу код.
-                    <br />
-                    Всё остальное — между строк.
-                  </p>
-                </div>
+              <div className="intro">
+                <p className="eyebrow">
+                  YOU FOUND MY LITTLE CORNER OF THE INTERNET.
+                </p>
+                <AnimatedGreeting />
+                <p className="intro-copy">
+                  Я m0xxie. Делаю музыку, пишу код.
+                  <br />
+                  Всё остальное — между строк.
+                </p>
               </div>
-            </div>
-            <div className="terminal-divider" />
-            <div
-              id="history"
-              ref={log}
-              role="log"
-              aria-label="Ответы терминала"
-              aria-live="polite"
-              aria-relevant="additions text"
-              aria-busy={!!active}
-            >
-              {entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className={`history-entry ${entry.id === active?.id ? "typing" : ""}`}
-                >
-                  <div className="history-command">
-                    <FiChevronRight aria-hidden="true" /> {entry.command}
+              <div className="terminal-divider" />
+              <div
+                id="history"
+                role="log"
+                aria-label="Ответы терминала"
+                aria-live="polite"
+                aria-relevant="additions text"
+                aria-busy={!!active}
+              >
+                {entries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className={`history-entry ${entry.id === active?.id ? "typing" : ""}`}
+                  >
+                    <div className="history-command">
+                      <FiChevronRight aria-hidden="true" /> {entry.command}
+                    </div>
+                    <div className="history-response">
+                      {entry.text.slice(0, entry.visible)}
+                      {entry.link && entry.visible > entry.text.length && (
+                        <>
+                          {"\n"}
+                          <a
+                            href={entry.link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {entry.link.label.slice(
+                              0,
+                              entry.visible - entry.text.length - 1,
+                            )}
+                            {entry.done && (
+                              <FiExternalLink
+                                className="external-link-icon"
+                                aria-hidden="true"
+                              />
+                            )}
+                          </a>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="history-response">
-                    {entry.text.slice(0, entry.visible)}
-                    {entry.link && entry.visible > entry.text.length && (
-                      <>
-                        {"\n"}
-                        <a
-                          href={entry.link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                ))}
+              </div>
+              <div className="prompt-area" ref={prompt}>
+                <p className="input-hint" hidden={entries.length > 0}>
+                  Введи{" "}
+                  <button
+                    aria-label="Показать команды"
+                    onClick={() => {
+                      setValue("/");
+                      setSelected(0);
+                      setMenu(true);
+                      focus();
+                    }}
+                  >
+                    /
+                  </button>
+                  , чтобы начать.
+                </p>
+                <CommandSuggestions
+                  open={showMenu}
+                  scrollContainer={chat}
+                  selected={selected}
+                >
+                  <div
+                    id="suggestions"
+                    role="listbox"
+                    aria-label="Доступные команды"
+                  >
+                    {filtered.length ? (
+                      filtered.map((command, i) => (
+                        <button
+                          key={command.name}
+                          id={`option-${command.name}`}
+                          type="button"
+                          role="option"
+                          aria-selected={i === selected}
+                          tabIndex={-1}
+                          onPointerDown={(event) => event.preventDefault()}
+                          onClick={() => execute("/" + command.name)}
                         >
-                          {entry.link.label.slice(
-                            0,
-                            entry.visible - entry.text.length - 1,
-                          )}
-                          {entry.done && (
-                            <FiExternalLink
-                              className="external-link-icon"
-                              aria-hidden="true"
-                            />
-                          )}
-                        </a>
-                      </>
+                          <command.Icon aria-hidden="true" /> /{command.name}
+                          <span>{command.description}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="no-results">
+                        Команда не найдена. Введи /help.
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                </CommandSuggestions>
+              </div>
             </div>
-            <div className="prompt-area" ref={prompt}>
-              <p className="input-hint" hidden={entries.length > 0}>
-                Введи{" "}
-                <button
-                  aria-label="Показать команды"
-                  onClick={() => {
-                    setValue("/");
-                    setSelected(0);
-                    setMenu(true);
-                    focus();
-                  }}
-                >
-                  /
-                </button>
-                , чтобы начать.
-              </p>
+            <div className="terminal-input-dock">
               <form
                 id="command-form"
                 autoComplete="off"
@@ -340,35 +361,6 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
                   <FiCornerDownLeft aria-hidden="true" />
                 </button>
               </form>
-              {showMenu && (
-                <div
-                  id="suggestions"
-                  role="listbox"
-                  aria-label="Доступные команды"
-                >
-                  {filtered.length ? (
-                    filtered.map((command, i) => (
-                      <button
-                        key={command.name}
-                        id={`option-${command.name}`}
-                        type="button"
-                        role="option"
-                        aria-selected={i === selected}
-                        tabIndex={-1}
-                        onPointerDown={(event) => event.preventDefault()}
-                        onClick={() => execute("/" + command.name)}
-                      >
-                        <command.Icon aria-hidden="true" /> /{command.name}
-                        <span>{command.description}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="no-results">
-                      Команда не найдена. Введи /help.
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             <div className="terminal-bottom">
               <span>
