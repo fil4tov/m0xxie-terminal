@@ -1,32 +1,68 @@
-import { act, renderHook } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAudioPlayer } from "./useAudioPlayer";
+import App from "../App";
+import { createElement } from "react";
 
 const library = vi.hoisted(() => [
-  { title: "better", artist: "m0xxie", src: "/audio/better.mp3" },
+  {
+    title: "better",
+    artist: "m0xxie",
+    src: "/audio/better.mp3",
+    duration: 120.5,
+  },
   {
     title: "free my mind",
     artist: "m0xxie",
     src: "/audio/free%20my%20mind.wav",
+    duration: 130.5,
   },
-  { title: "voyage", artist: "m0xxie", src: "/audio/voyage.mp3" },
+  {
+    title: "voyage",
+    artist: "m0xxie",
+    src: "/audio/voyage.mp3",
+    duration: 140.5 as number | null,
+  },
 ]);
 vi.mock("../tracks", () => ({ tracks: library }));
+// JSDOM has no WebGL; keep the real player controls and stub only the 3D renderer.
+vi.mock("../three/createPlayer", () => ({
+  createPlayer: () => ({ setPlaying() {}, dispose() {} }),
+}));
 
 // JSDOM cannot decode audio: simulate only the browser's media boundary.
 class TestAudio extends EventTarget {
   static instances: TestAudio[] = [];
-  src = "";
+  static sources: string[] = [];
+  private source = "";
+  get src() {
+    return this.source;
+  }
+  set src(value: string) {
+    this.source = value;
+    if (value) TestAudio.sources.push(value);
+  }
   preload = "";
   volume = 1;
   currentTime = 0;
   duration = 240;
   paused = true;
+  readyState = 0;
   constructor() {
     super();
     TestAudio.instances.push(this);
   }
   async play() {
+    if (!this.readyState) {
+      this.readyState = 1;
+      this.dispatchEvent(new Event("loadedmetadata"));
+    }
     this.paused = false;
     this.dispatchEvent(new Event("play"));
   }
@@ -36,6 +72,7 @@ class TestAudio extends EventTarget {
   }
   load() {
     this.currentTime = 0;
+    this.readyState = 0;
   }
   removeAttribute(name: string) {
     if (name === "src") this.src = "";
@@ -44,11 +81,56 @@ class TestAudio extends EventTarget {
 describe("audio transport", () => {
   beforeEach(() => {
     TestAudio.instances = [];
+    TestAudio.sources = [];
     vi.stubGlobal("Audio", TestAudio);
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+  it("shows durations on opening, loads only on Play and preserves audio on reopening", async () => {
+    vi.useFakeTimers();
+    render(createElement(App));
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    expect(TestAudio.instances).toHaveLength(0);
+    expect(TestAudio.sources).toEqual([]);
+
+    const openPlayer = async () => {
+      const input = screen.getByRole("combobox");
+      fireEvent.change(input, { target: { value: "/player" } });
+      fireEvent.submit(input.closest("form")!);
+      await act(() => vi.advanceTimersByTimeAsync(3000));
+    };
+    await openPlayer();
+    const media = TestAudio.instances[0];
+    expect(TestAudio.instances).toHaveLength(1);
+    expect(TestAudio.sources).toEqual([]);
+    expect(
+      screen.getByRole("button", { name: "Выбрать better" }),
+    ).toHaveTextContent("2:00");
+    fireEvent.click(screen.getByRole("button", { name: "Выбрать voyage" }));
+    expect(TestAudio.sources).toEqual([]);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Воспроизвести" }));
+    });
+    expect(TestAudio.sources).toEqual(["/audio/voyage.mp3"]);
+    act(() => {
+      media.dispatchEvent(new Event("loadedmetadata"));
+      media.currentTime = 42;
+      media.dispatchEvent(new Event("timeupdate"));
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть плеер" }));
+    await openPlayer();
+    expect(TestAudio.instances).toHaveLength(1);
+    expect(
+      screen.getByRole("slider", { name: "Позиция воспроизведения" }),
+    ).toHaveValue("42");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Воспроизвести" }));
+    });
+    expect(media.paused).toBe(false);
+    expect(TestAudio.sources).toEqual(["/audio/voyage.mp3"]);
   });
   it("shuffles through every track, keeps back/forward history and preserves pause", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.99);
@@ -93,40 +175,43 @@ describe("audio transport", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.99);
     const { result } = renderHook(useAudioPlayer);
     act(() => result.current.toggleShuffle());
-    await act(async () => result.current.choose(1));
+    await act(async () => result.current.choose(1, true));
     await act(async () => result.current.transport("next"));
     expect(result.current.index).toBe(2);
     await act(async () => result.current.transport("next"));
     expect(result.current.index).toBe(0);
   });
-  it("loads every duration without playing and reuses metadata when selecting a track", () => {
+  it("uses build durations before playback and does not load when selecting or seeking", async () => {
     const { result, unmount } = renderHook(useAudioPlayer);
-    expect(result.current.durations).toEqual([null, null, null]);
-    const probes = TestAudio.instances.slice(1);
-    expect(probes).toHaveLength(3);
-    act(() => {
-      probes.forEach((probe, i) => {
-        probe.duration = 120.5 + i * 10;
-        probe.dispatchEvent(new Event("loadedmetadata"));
-      });
-    });
     expect(result.current.durations).toEqual([120.5, 130.5, 140.5]);
     expect(result.current.duration).toBe(120.5);
     expect(TestAudio.instances.every((audio) => audio.paused)).toBe(true);
-    act(() => result.current.choose(2, false));
+    act(() => result.current.choose(2));
     expect(result.current.duration).toBe(140.5);
+    act(() => result.current.seek(42));
+    expect(result.current.position).toBe(42);
+    expect(TestAudio.sources).toEqual([]);
+    await act(async () => result.current.transport("play"));
+    expect(TestAudio.sources).toEqual(["/audio/voyage.mp3"]);
+    expect(TestAudio.instances[0].currentTime).toBe(42);
     unmount();
     expect(TestAudio.instances.every((audio) => audio.src === "")).toBe(true);
   });
-  it("keeps unknown duration for unreadable metadata without blocking the other tracks", () => {
-    const { result } = renderHook(useAudioPlayer);
-    act(() => {
-      TestAudio.instances[1].dispatchEvent(new Event("error"));
-      TestAudio.instances[2].duration = 192;
-      TestAudio.instances[2].dispatchEvent(new Event("loadedmetadata"));
-    });
-    expect(result.current.durations).toEqual([null, 192, null]);
-    expect(result.current.error).toBe("");
+  it("resolves an unknown build duration only after playing that track", async () => {
+    const original = library[2].duration;
+    library[2].duration = null;
+    try {
+      const { result } = renderHook(useAudioPlayer);
+      expect(result.current.durations).toEqual([120.5, 130.5, null]);
+      act(() => result.current.choose(2));
+      expect(result.current.duration).toBe(0);
+      expect(TestAudio.sources).toEqual([]);
+      await act(async () => result.current.transport("play"));
+      expect(result.current.duration).toBe(240);
+      expect(result.current.durations).toEqual([120.5, 130.5, 240]);
+    } finally {
+      library[2].duration = original;
+    }
   });
   it("handles an empty audio folder without starting media or breaking shuffle", () => {
     const original = library.splice(0);
@@ -151,15 +236,25 @@ describe("audio transport", () => {
     act(() => result.current.transport("previous"));
     expect(result.current.track?.title).toBe("voyage");
     expect(result.current.playing).toBe(false);
+    expect(TestAudio.sources).toEqual([]);
     await act(async () => result.current.transport("play"));
     expect(result.current.playing).toBe(true);
     await act(async () => result.current.transport("next"));
     expect(result.current.track?.title).toBe("better");
     expect(result.current.playing).toBe(true);
+    expect(TestAudio.sources).toEqual([
+      "/audio/voyage.mp3",
+      "/audio/better.mp3",
+    ]);
+    act(() => result.current.pause());
+    act(() => result.current.transport("next"));
+    expect(TestAudio.sources).toHaveLength(2);
+    await act(async () => result.current.transport("play"));
+    expect(TestAudio.sources[2]).toBe("/audio/free%20my%20mind.wav");
   });
   it("responds to track completion, bounds seek/volume, and stops at zero", async () => {
     const { result } = renderHook(useAudioPlayer);
-    await act(async () => result.current.choose(1));
+    await act(async () => result.current.choose(1, true));
     expect(result.current.track?.title).toBe("free my mind");
     await act(async () =>
       TestAudio.instances[0].dispatchEvent(new Event("ended")),

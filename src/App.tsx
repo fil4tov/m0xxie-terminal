@@ -5,8 +5,13 @@ import { useAudioPlayer } from "./hooks/useAudioPlayer";
 
 export default function App() {
   const terminal = useRef<TerminalHandle>(null),
-    [listening, setListening] = useState(false);
-  const player = useAudioPlayer();
+    [listening, setListening] = useState(false),
+    [playerOpened, setPlayerOpened] = useState(false);
+  const player = useAudioPlayer(playerOpened);
+  function openPlayer() {
+    setPlayerOpened(true);
+    setListening(true);
+  }
   function closePlayer() {
     player.pause();
     setListening(false);
@@ -18,7 +23,7 @@ export default function App() {
     >
       <div className="noise" aria-hidden="true" />
       <main id="workspace">
-        <Terminal ref={terminal} onListen={() => setListening(true)} />
+        <Terminal ref={terminal} onListen={openPlayer} />
         {listening && <PlayerPanel player={player} onClose={closePlayer} />}
       </main>
     </div>

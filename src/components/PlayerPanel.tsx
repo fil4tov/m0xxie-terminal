@@ -137,9 +137,9 @@ export function PlayerPanel({
           <button
             key={track.src}
             className="track"
-            onClick={() => player.choose(i)}
+            onClick={() => player.choose(i, player.playing)}
             aria-pressed={player.index === i}
-            aria-label={`Слушать ${track.title}`}
+            aria-label={`Выбрать ${track.title}`}
           >
             <span className="track-number">
               {player.index === i ? (

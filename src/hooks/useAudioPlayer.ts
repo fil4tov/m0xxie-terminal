@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { tracks } from "../tracks";
-import { loadTrackDurations } from "../lib/loadTrackDurations";
 const VOLUME_STORAGE_KEY = "m0xxie-player-volume";
 const DEFAULT_VOLUME = 0.5;
 
@@ -18,9 +17,11 @@ function readVolume() {
 }
 
 export type TransportAction = "play" | "stop" | "previous" | "next";
-export function useAudioPlayer() {
+export function useAudioPlayer(enabled = true) {
   const audio = useRef<HTMLAudioElement | null>(null),
     indexRef = useRef(0),
+    loadedIndex = useRef<number | null>(null),
+    positionRef = useRef(0),
     request = useRef(0);
   const shuffleState = useRef({
     enabled: false,
@@ -32,10 +33,12 @@ export function useAudioPlayer() {
   const [index, setIndex] = useState(0),
     [playing, setPlaying] = useState(false),
     [position, setPosition] = useState(0),
-    [duration, setDuration] = useState(0),
+    [duration, setDuration] = useState(tracks[0]?.duration ?? 0),
     [volume, setVolumeState] = useState(readVolume),
     [error, setError] = useState("");
-  const durationCache = useRef<(number | null)[]>(tracks.map(() => null));
+  const durationCache = useRef<(number | null)[]>(
+    tracks.map((track) => track.duration),
+  );
   const [durations, setDurations] = useState(durationCache.current);
   function rememberDuration(index: number, value: number) {
     if (!Number.isFinite(value) || value <= 0) return;
@@ -50,6 +53,11 @@ export function useAudioPlayer() {
     if (!element || !tracks.length) return;
     const token = ++request.current;
     try {
+      if (loadedIndex.current !== indexRef.current) {
+        loadedIndex.current = indexRef.current;
+        element.src = tracks[indexRef.current].src;
+        element.load();
+      }
       await element.play();
       if (token === request.current) setError("");
     } catch (error) {
@@ -71,14 +79,17 @@ export function useAudioPlayer() {
     if (!element || !tracks.length || !Number.isInteger(next)) return;
     ++request.current;
     element.pause();
+    if (loadedIndex.current !== null) {
+      element.removeAttribute("src");
+      element.load();
+      loadedIndex.current = null;
+    }
     indexRef.current = (next + tracks.length) % tracks.length;
-    const track = tracks[indexRef.current];
     setIndex(indexRef.current);
+    positionRef.current = 0;
     setPosition(0);
     setDuration(durationCache.current[indexRef.current] ?? 0);
     setError("");
-    element.src = track.src;
-    element.load();
     if (autoplay) void play();
   }
   function resetShuffle(current: number) {
@@ -93,7 +104,7 @@ export function useAudioPlayer() {
     resetShuffle(indexRef.current);
     setShuffle(state.enabled);
   }
-  function choose(next: number, autoplay = true) {
+  function choose(next: number, autoplay = false) {
     loadTrack(next, autoplay);
     resetShuffle(indexRef.current);
   }
@@ -121,16 +132,27 @@ export function useAudioPlayer() {
     loadTrack(state.history[state.cursor], autoplay);
   }
   useEffect(() => {
-    if (!tracks.length) return;
+    if (!enabled || !tracks.length) return;
     const element = new Audio();
     audio.current = element;
-    element.preload = "metadata";
+    element.preload = "none";
     element.volume = volume;
     const onPlay = () => setPlaying(true),
       onPause = () => setPlaying(false),
-      onTime = () => setPosition(element.currentTime);
+      onTime = () => {
+        // Ignore reset events while switching to an as-yet-unloaded track.
+        if (loadedIndex.current === null || element.readyState < 1) return;
+        positionRef.current = element.currentTime;
+        setPosition(element.currentTime);
+      };
     const onMetadata = () => {
       rememberDuration(indexRef.current, element.duration);
+      if (positionRef.current > 0 && Number.isFinite(element.duration)) {
+        const next = Math.min(positionRef.current, element.duration);
+        element.currentTime = next;
+        positionRef.current = next;
+        setPosition(next);
+      }
     };
     const onEnd = () => advance(1, true);
     const onError = () =>
@@ -143,7 +165,6 @@ export function useAudioPlayer() {
     element.addEventListener("loadedmetadata", onMetadata);
     element.addEventListener("ended", onEnd);
     element.addEventListener("error", onError);
-    element.src = tracks[indexRef.current].src;
     return () => {
       ++request.current;
       element.removeEventListener("play", onPlay);
@@ -156,9 +177,9 @@ export function useAudioPlayer() {
       element.removeAttribute("src");
       element.load();
       audio.current = null;
+      loadedIndex.current = null;
     };
-  }, []);
-  useEffect(() => loadTrackDurations(tracks, rememberDuration), []);
+  }, [enabled]);
   function transport(action: TransportAction) {
     const element = audio.current;
     if (!element) return;
@@ -169,6 +190,7 @@ export function useAudioPlayer() {
     if (action === "stop") {
       pause();
       element.currentTime = 0;
+      positionRef.current = 0;
       setPosition(0);
     }
     if (action === "previous" || action === "next")
@@ -176,9 +198,16 @@ export function useAudioPlayer() {
   }
   function seek(value: number) {
     const element = audio.current;
-    if (!element || !Number.isFinite(element.duration)) return;
-    element.currentTime = Math.max(0, Math.min(value, element.duration));
-    setPosition(element.currentTime);
+    if (!element || !Number.isFinite(value)) return;
+    const mediaReady = loadedIndex.current !== null && element.readyState >= 1;
+    const limit = mediaReady
+      ? element.duration
+      : durationCache.current[indexRef.current];
+    if (limit == null || !Number.isFinite(limit)) return;
+    const next = Math.max(0, Math.min(value, limit));
+    positionRef.current = next;
+    setPosition(next);
+    if (mediaReady) element.currentTime = next;
   }
   function setVolume(value: number) {
     if (!Number.isFinite(value)) return;

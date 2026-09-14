@@ -1,12 +1,13 @@
 import { readdirSync } from "node:fs";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { Plugin } from "vite";
+import { parseFile } from "music-metadata";
 
 const audioExtension = /\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|webm)$/i;
 const moduleId = "virtual:audio-library";
 const resolvedId = `\0${moduleId}`;
 
-export function readAudioLibrary(directory: string, base = "/") {
+export async function readAudioLibrary(directory: string, base = "/") {
   function scan(folder: string): string[] {
     try {
       return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
@@ -19,13 +20,33 @@ export function readAudioLibrary(directory: string, base = "/") {
       throw error;
     }
   }
-  return scan(directory)
-    .sort((a, b) => a.localeCompare(b, "en", { numeric: true }))
-    .map((file) => ({
+  const files = scan(directory).sort((a, b) =>
+    a.localeCompare(b, "en", { numeric: true }),
+  );
+  const tracks = [];
+  for (const file of files) {
+    let duration: number | null = null;
+    try {
+      const metadata = await parseFile(file, {
+        duration: true,
+        skipCovers: true,
+      });
+      const seconds = metadata.format.duration;
+      if (seconds !== undefined && Number.isFinite(seconds) && seconds > 0)
+        duration = seconds;
+    } catch {
+      // Keep unreadable tracks listed; playback can report a media error later.
+    }
+    if (duration === null)
+      console.warn(`[audio-library] Could not determine duration: ${file}`);
+    tracks.push({
       title: basename(file, extname(file)),
       artist: "m0xxie",
       src: `${base.replace(/\/$/, "")}/${relative(directory, file).split(sep).map(encodeURIComponent).join("/")}`,
-    }));
+      duration,
+    });
+  }
+  return tracks;
 }
 
 export function audioLibraryPlugin(): Plugin {
@@ -40,9 +61,9 @@ export function audioLibraryPlugin(): Plugin {
     resolveId(id) {
       if (id === moduleId) return resolvedId;
     },
-    load(id) {
+    async load(id) {
       if (id === resolvedId)
-        return `export default ${JSON.stringify(readAudioLibrary(publicDirectory, base))};`;
+        return `export default ${JSON.stringify(await readAudioLibrary(publicDirectory, base))};`;
     },
     configureServer(server) {
       const onChange = (file: string) => {
