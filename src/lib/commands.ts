@@ -21,7 +21,7 @@ export function resolveCommand(raw: string): CommandResult {
   if (name === "clear") return { text: "", action: "clear" };
   if (name === "listen")
     return {
-      text: "Подключаю MX–90…\nЛента загружена. Нажми «Воспроизвести», чтобы слушать.",
+      text: "Подключаю FR–01…\nЛента загружена. Нажми «Воспроизвести», чтобы слушать.",
       action: "listen",
     };
   if (name === "help")

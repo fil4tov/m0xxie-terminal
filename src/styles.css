@@ -535,23 +535,7 @@ h1 {
   align-items: center;
   gap: 15px;
 }
-.tape-side {
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-  border: 1px solid var(--line);
-  padding: 11px 9px;
-  color: var(--muted);
-}
-.tape-side i {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border: 1px solid var(--muted);
-  margin-left: 7px;
-  border-radius: 50%;
-}
-.now-playing > div:nth-child(2) {
+.now-playing > div:first-child {
   min-width: 0;
 }
 .now-playing p {
@@ -616,6 +600,8 @@ input[type="range"] {
 }
 .transport {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
 }
@@ -642,6 +628,11 @@ input[type="range"] {
   width: 53px;
   background: var(--surface);
   color: var(--accent);
+}
+.transport .shuffle-button[aria-pressed="true"] {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .volume-label {
   display: flex;

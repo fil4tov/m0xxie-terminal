@@ -1,6 +1,6 @@
 # M0XXIE — Phosphor
 
-Личный сайт-терминал на **React + TypeScript + Vite**, с кассетным плеером на Three.js и иконками React Icons (Feather и Simple Icons). Реализован выбранный первый вариант: зелёный CRT-экран и тёмный корпус MX–90.
+Личный сайт-терминал на **React + TypeScript + Vite**, с кассетным плеером на Three.js и иконками React Icons (Feather и Simple Icons). Реализован выбранный первый вариант: зелёный CRT-экран и песочный Field Recorder FR–01 с чёрной кассетой.
 
 ## Локальный запуск
 
@@ -35,7 +35,8 @@ npm run preview   # просмотр сборки после остановки 
 - `src/components/PlayerPanel.tsx` — интерфейс плеера.
 - `src/components/CassetteScene.tsx` — жизненный цикл 3D-сцены в React.
 - `src/hooks/useAudioPlayer.ts` — воспроизведение и состояние аудио.
-- `src/three/createPlayer.ts` — модель, освещение, катушки и кнопки.
+- `src/three/createPlayer.ts` — рендеринг, освещение и управление 3D-сценой.
+- `src/three/buildFieldRecorder.ts` — корпус, кассета, катушки и кнопки FR–01.
 - `src/lib/commands.ts` — определения и обработка команд.
 - `src/config.ts` — ссылки и список треков.
 - `src/styles.css` — оформление Phosphor и адаптивность.

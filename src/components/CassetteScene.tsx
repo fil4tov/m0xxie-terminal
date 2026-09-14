@@ -21,6 +21,7 @@ export function CassetteScene({
   }, [onAction, playing]);
   useEffect(() => {
     let disposed = false;
+    setFailed(false);
     import("../three/createPlayer")
       .then(({ createPlayer }) => {
         if (disposed || !container.current) return;
@@ -29,7 +30,8 @@ export function CassetteScene({
         );
         scene.current.setPlaying(playingRef.current);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        console.error("Could not initialize the player scene", error);
         if (!disposed) setFailed(true);
       });
     return () => {

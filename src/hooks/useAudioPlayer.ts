@@ -5,6 +5,13 @@ export function useAudioPlayer() {
   const audio = useRef<HTMLAudioElement | null>(null),
     indexRef = useRef(0),
     request = useRef(0);
+  const shuffleState = useRef({
+    enabled: false,
+    remaining: [] as number[],
+    history: [0],
+    cursor: 0,
+  });
+  const [shuffle, setShuffle] = useState(false);
   const [index, setIndex] = useState(0),
     [playing, setPlaying] = useState(false),
     [position, setPosition] = useState(0),
@@ -35,7 +42,7 @@ export function useAudioPlayer() {
     ++request.current;
     audio.current?.pause();
   }
-  function choose(next: number, autoplay = true) {
+  function loadTrack(next: number, autoplay = true) {
     const element = audio.current;
     if (!element) return;
     ++request.current;
@@ -49,6 +56,44 @@ export function useAudioPlayer() {
     element.src = track.src;
     element.load();
     if (autoplay) void play();
+  }
+  function resetShuffle(current: number) {
+    const state = shuffleState.current;
+    state.remaining = tracks.map((_, i) => i).filter((i) => i !== current);
+    state.history = [current];
+    state.cursor = 0;
+  }
+  function toggleShuffle() {
+    const state = shuffleState.current;
+    state.enabled = !state.enabled;
+    resetShuffle(indexRef.current);
+    setShuffle(state.enabled);
+  }
+  function choose(next: number, autoplay = true) {
+    loadTrack(next, autoplay);
+    resetShuffle(indexRef.current);
+  }
+  function advance(direction: 1 | -1, autoplay: boolean) {
+    const state = shuffleState.current;
+    if (!state.enabled) {
+      loadTrack(indexRef.current + direction, autoplay);
+      return;
+    }
+    if (direction === -1) {
+      state.cursor = Math.max(0, state.cursor - 1);
+    } else if (state.cursor < state.history.length - 1) {
+      state.cursor++;
+    } else {
+      if (!state.remaining.length) state.remaining = tracks.map((_, i) => i);
+      const candidates = state.remaining.filter((i) => i !== indexRef.current);
+      const next = candidates.length
+        ? candidates[Math.floor(Math.random() * candidates.length)]
+        : state.remaining[0];
+      state.remaining = state.remaining.filter((i) => i !== next);
+      state.history.push(next);
+      state.cursor++;
+    }
+    loadTrack(state.history[state.cursor], autoplay);
   }
   useEffect(() => {
     const element = new Audio();
@@ -67,7 +112,7 @@ export function useAudioPlayer() {
         ),
       );
     };
-    const onEnd = () => choose(indexRef.current + 1);
+    const onEnd = () => advance(1, true);
     const onError = () =>
       setError(
         "Файл не загрузился. Проверь соединение или выбери другой трек.",
@@ -106,7 +151,7 @@ export function useAudioPlayer() {
       setPosition(0);
     }
     if (action === "previous" || action === "next")
-      choose(indexRef.current + (action === "next" ? 1 : -1), !element.paused);
+      advance(action === "next" ? 1 : -1, !element.paused);
   }
   function seek(value: number) {
     const element = audio.current;
@@ -128,6 +173,8 @@ export function useAudioPlayer() {
     durations,
     volume,
     error,
+    shuffle,
+    toggleShuffle,
     transport,
     choose,
     seek,

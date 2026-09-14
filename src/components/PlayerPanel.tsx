@@ -9,6 +9,7 @@ import {
   FiPlay,
   FiSkipBack,
   FiSkipForward,
+  FiShuffle,
   FiX,
 } from "react-icons/fi";
 const time = (value: number) =>
@@ -46,14 +47,11 @@ export function PlayerPanel({
         <div className="device-halo" aria-hidden="true" />
         <CassetteScene playing={player.playing} onAction={player.transport} />
         <span className="device-side-label" aria-hidden="true">
-          PORTABLE STEREO / MX–90
+          PORTABLE STEREO / FR–01
         </span>
       </div>
       <p className="device-hint">Поверни плеер · нажми кнопку на корпусе</p>
       <div className="now-playing">
-        <span className="tape-side">
-          SIDE A <i />
-        </span>
         <div>
           <p id="track-title">{player.track.title}</p>
           <p id="track-artist">{player.track.artist} / PERSONAL TAPES</p>
@@ -105,6 +103,15 @@ export function PlayerPanel({
             aria-label="Следующий трек"
           >
             <FiSkipForward aria-hidden="true" />
+          </button>
+          <button
+            onClick={player.toggleShuffle}
+            className="shuffle-button"
+            aria-label="Случайный порядок"
+            aria-pressed={player.shuffle}
+            title={player.shuffle ? "Выключить shuffle" : "Включить shuffle"}
+          >
+            <FiShuffle aria-hidden="true" />
           </button>
         </div>
         <label className="volume-label">
