@@ -143,7 +143,7 @@ main {
   --screen-inset: 37px;
   display: flex;
   flex-direction: column;
-  height: min(540px, calc(100dvh - 140px));
+  height: min(600px, calc(100dvh - 140px));
   position: relative;
   overflow: hidden;
   background:
@@ -770,7 +770,7 @@ input[type="range"] {
   .app.listening .terminal-screen {
     --screen-inset: 19px;
     padding: 22px var(--screen-inset) !important;
-    height: min(540px, calc(100dvh - 120px));
+    height: min(600px, calc(100dvh - 120px));
   }
   .boot {
     font-size: 8px;

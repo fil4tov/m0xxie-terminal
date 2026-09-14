@@ -94,7 +94,7 @@ describe("Terminal", () => {
       render(<Terminal onListen={vi.fn()} />);
       submit("/telegram");
       await act(() => vi.advanceTimersByTimeAsync(2000));
-      expect(screen.getByRole("log")).toHaveTextContent("Мой Telegram:");
+      expect(screen.getByRole("log")).toHaveTextContent(links.telegram.note);
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
       submit("/clear");
       links.telegram.url = "https://example.com/telegram-profile";
@@ -155,11 +155,11 @@ describe("Terminal", () => {
   it("opens the player after the response and cancels queued work on clear", async () => {
     const onListen = vi.fn();
     render(<Terminal onListen={onListen} />);
-    submit("/listen");
+    submit("/player");
     expect(onListen).not.toHaveBeenCalled();
     await act(() => vi.advanceTimersByTimeAsync(3000));
     expect(onListen).toHaveBeenCalledTimes(1);
-    submit("/listen");
+    submit("/player");
     submit("/github");
     submit("/clear");
     await act(() => vi.advanceTimersByTimeAsync(6000));

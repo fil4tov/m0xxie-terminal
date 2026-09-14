@@ -10,12 +10,12 @@ export const links: Record<"github" | "telegram", ProfileLink> = {
   github: {
     url: "https://github.com/fil4tov",
     label: "github.com/fil4tov",
-    note: "Мой GitHub — код и проекты.",
+    note: "Мои проекты в GitHub:",
   },
   telegram: {
     url: "https://t.me/fil4tov",
     label: "Telegram",
-    note: "Мой Telegram:",
+    note: "Мой Telegram для связи:",
   },
 };
 

@@ -22,15 +22,15 @@ describe("terminal underline caret", () => {
     expect(container.querySelector(".terminal-input-caret")).toHaveTextContent(
       "_",
     );
-    fireEvent.change(input, { target: { value: "/listen" } });
-    expect(input).toHaveValue("/listen");
+    fireEvent.change(input, { target: { value: "/player" } });
+    expect(input).toHaveValue("/player");
     expect(container.querySelector(".terminal-input-prefix")).toHaveTextContent(
-      "/listen",
+      "/player",
     );
     input.setSelectionRange(3, 3);
     fireEvent.keyUp(input, { key: "ArrowLeft" });
     expect(container.querySelector(".terminal-input-prefix")).toHaveTextContent(
-      "/li",
+      "/pl",
     );
     fireEvent.change(input, { target: { value: "" } });
     expect(

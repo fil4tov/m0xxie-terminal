@@ -106,7 +106,7 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
           );
           if (done) {
             window.clearInterval(timer);
-            if (entry.action === "listen") listenRef.current();
+            if (entry.action === "player") listenRef.current();
           }
         },
         reduced ? 0 : 14,
