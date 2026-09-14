@@ -316,9 +316,45 @@ h1 {
   color: var(--accent);
   animation: blink 1.3s step-end infinite;
 }
-.enter-button {
-  font-size: 20px;
-  color: var(--muted);
+.terminal-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px;
+  background: #17271c;
+  border: 1px solid #3f5d48;
+  border-radius: 7px;
+}
+.terminal-actions button {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.terminal-actions .slash-button {
+  font-size: 15px;
+  border-right: 1px solid #35513e;
+  border-radius: 4px 0 0 4px;
+}
+.terminal-actions .enter-button {
+  border-radius: 0 4px 4px 0;
+}
+.terminal-actions button:hover,
+.terminal-actions .slash-button[aria-expanded="true"] {
+  background: var(--line);
+  color: var(--accent);
+}
+.terminal-actions button:active {
+  background: #365941;
+}
+.terminal-actions button:focus-visible {
+  outline-offset: -2px;
 }
 #suggestions {
   margin: 0;
@@ -849,6 +885,17 @@ input[type="range"] {
     min-height: 44px;
   }
 }
+@media (pointer: coarse) {
+  .terminal-actions button {
+    width: 44px;
+    height: 44px;
+  }
+}
+@media (max-width: 420px) {
+  .prompt-path {
+    display: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *:before,
@@ -887,6 +934,7 @@ svg {
 }
 .terminal-top button,
 .enter-button,
+.slash-button,
 .player-heading > button,
 .transport button {
   display: inline-flex;

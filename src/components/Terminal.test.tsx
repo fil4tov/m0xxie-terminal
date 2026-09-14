@@ -12,17 +12,74 @@ describe("Terminal", () => {
     });
     fireEvent.submit(screen.getByRole("combobox").closest("form")!);
   };
-  it("focuses the command input on mount and restores focus after a background click", () => {
+  it("toggles all commands without changing input text or selection", () => {
+    render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    const slash = screen.getByRole("button", { name: "Меню команд" });
+    fireEvent.click(slash);
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    expect(screen.getAllByRole("option")).toHaveLength(6);
+    expect(slash).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("log")).toBeEmptyDOMElement();
+    fireEvent.click(slash);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(slash).toHaveAttribute("aria-expanded", "false");
+    fireEvent.change(input, { target: { value: "abXYcd" } });
+    act(() => input.setSelectionRange(2, 4));
+    fireEvent.pointerDown(slash);
+    fireEvent.click(slash);
+    expect(input).toHaveValue("abXYcd");
+    expect(input.selectionStart).toBe(2);
+    expect(input.selectionEnd).toBe(4);
+    expect(screen.getAllByRole("option")).toHaveLength(6);
+    expect(input).toHaveFocus();
+    expect(screen.getByRole("log")).toBeEmptyDOMElement();
+    fireEvent.click(slash);
+    expect(input).toHaveValue("abXYcd");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+  it("closes the command menu with Escape or outside clicks and filters when typing resumes", () => {
+    render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox");
+    const slash = screen.getByRole("button", { name: "Меню команд" });
+    fireEvent.click(slash);
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(slash).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(slash);
+    fireEvent.pointerDown(document.body);
+    expect(slash).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(slash);
+    fireEvent.change(input, { target: { value: "/gi" } });
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    fireEvent.click(slash);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    fireEvent.click(slash);
+    expect(screen.getAllByRole("option")).toHaveLength(6);
+    expect(input).toHaveValue("/gi");
+  });
+  it("supports keyboard completion from the button-opened menu", () => {
+    render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.click(screen.getByRole("button", { name: "Меню команд" }));
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Tab" });
+    expect(input).toHaveValue("/telegram");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+  it("keeps background clicks unfocused and resumes the command with the first typed character", () => {
     render(<Terminal onListen={vi.fn()} />);
     const input = screen.getByRole("combobox");
     expect(input).toHaveFocus();
     fireEvent.change(input, { target: { value: "pi" } });
     act(() => input.blur());
     fireEvent.click(document.body);
+    expect(input).not.toHaveFocus();
+    fireEvent.keyDown(document.body, { key: "n" });
     expect(input).toHaveFocus();
-    expect(input).toHaveValue("pi");
+    expect(input).toHaveValue("pin");
   });
-  it("returns focus after a player control click without blocking its value change", () => {
+  it("preserves slider focus and keyboard controls until the user types text", () => {
     render(
       <>
         <Terminal onListen={vi.fn()} />
@@ -34,7 +91,106 @@ describe("Terminal", () => {
     fireEvent.change(slider, { target: { value: "30" } });
     fireEvent.click(slider);
     expect(slider).toHaveValue("30");
+    expect(slider).toHaveFocus();
+    expect(fireEvent.keyDown(slider, { key: "ArrowRight" })).toBe(true);
+    expect(fireEvent.keyDown(slider, { key: "Tab" })).toBe(true);
+    expect(slider).toHaveFocus();
+    fireEvent.keyDown(slider, { key: "p" });
     expect(screen.getByRole("combobox")).toHaveFocus();
+    expect(screen.getByRole("combobox")).toHaveValue("p");
+  });
+  it("preserves selected page text and copying after mouse release", () => {
+    render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox");
+    act(() => input.blur());
+    const text = screen.getByText("CONNECTION ESTABLISHED");
+    const selection = window.getSelection()!;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    try {
+      fireEvent.pointerUp(text);
+      fireEvent.click(text);
+      expect(input).not.toHaveFocus();
+      expect(selection.toString()).toBe("CONNECTION ESTABLISHED");
+      expect(
+        fireEvent.keyDown(document.body, { key: "c", ctrlKey: true }),
+      ).toBe(true);
+      expect(
+        fireEvent.keyDown(document.body, { key: "c", metaKey: true }),
+      ).toBe(true);
+      expect(selection.toString()).toBe("CONNECTION ESTABLISHED");
+      expect(input).toHaveValue("");
+    } finally {
+      selection.removeAllRanges();
+    }
+  });
+  it("inserts the first character at the saved caret and opens slash suggestions", () => {
+    const { container } = render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    act(() => input.blur());
+    fireEvent.keyDown(document.body, { key: "/" });
+    expect(input).toHaveValue("/");
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "pXng" } });
+    act(() => {
+      input.setSelectionRange(1, 2);
+      input.blur();
+    });
+    fireEvent.keyDown(document.body, { key: "i" });
+    expect(input).toHaveValue("ping");
+    expect(input.selectionStart).toBe(2);
+    expect(input.selectionEnd).toBe(2);
+    expect(container.querySelector(".terminal-input-prefix")).toHaveTextContent(
+      "pi",
+    );
+  });
+  it("respects the command length limit and leaves normal input typing to the browser", () => {
+    render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "x".repeat(120) } });
+    act(() => input.blur());
+    fireEvent.keyDown(document.body, { key: "p" });
+    expect(input).toHaveFocus();
+    expect(input.value).toHaveLength(120);
+    expect(fireEvent.keyDown(input, { key: "p" })).toBe(true);
+  });
+  it("leaves shortcuts, composition, and keyboard activation of controls alone", () => {
+    render(<Terminal onListen={vi.fn()} />);
+    const input = screen.getByRole("combobox");
+    const button = screen.getByRole("button", { name: "Очистить терминал" });
+    act(() => button.focus());
+    for (const key of [" ", "Enter", "Tab", "ArrowLeft"])
+      expect(fireEvent.keyDown(button, { key })).toBe(true);
+    expect(fireEvent.keyDown(button, { key: "a", altKey: true })).toBe(true);
+    expect(fireEvent.keyDown(button, { key: "x", isComposing: true })).toBe(
+      true,
+    );
+    expect(button).toHaveFocus();
+    expect(input).toHaveValue("");
+    fireEvent.keyDown(button, { key: "П", shiftKey: true });
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue("П");
+  });
+  it("does not redirect typing from other editable fields", () => {
+    render(
+      <>
+        <Terminal onListen={vi.fn()} />
+        <input aria-label="Другое поле" />
+        <div contentEditable suppressContentEditableWarning>
+          <span>Редактор</span>
+        </div>
+      </>,
+    );
+    const other = screen.getByRole("textbox", { name: "Другое поле" });
+    act(() => other.focus());
+    expect(fireEvent.keyDown(other, { key: "p" })).toBe(true);
+    expect(other).toHaveFocus();
+    const editor = screen.getByText("Редактор");
+    act(() => editor.parentElement!.focus());
+    expect(fireEvent.keyDown(editor, { key: "/" })).toBe(true);
+    expect(screen.getByRole("combobox")).toHaveValue("");
   });
   it("preserves the caret when clicking inside the command input", () => {
     render(<Terminal onListen={vi.fn()} />);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { tracks } from "../tracks";
+import { createAudioFader } from "../lib/createAudioFader";
 const VOLUME_STORAGE_KEY = "m0xxie-player-volume";
 const DEFAULT_VOLUME = 0.5;
 
@@ -22,6 +23,8 @@ export function useAudioPlayer(enabled = true) {
     indexRef = useRef(0),
     loadedIndex = useRef<number | null>(null),
     positionRef = useRef(0),
+    wantsToPlay = useRef(false),
+    fader = useRef<ReturnType<typeof createAudioFader> | null>(null),
     request = useRef(0);
   const shuffleState = useRef({
     enabled: false,
@@ -36,6 +39,7 @@ export function useAudioPlayer(enabled = true) {
     [duration, setDuration] = useState(tracks[0]?.duration ?? 0),
     [volume, setVolumeState] = useState(readVolume),
     [error, setError] = useState("");
+  const volumeRef = useRef(volume);
   const durationCache = useRef<(number | null)[]>(
     tracks.map((track) => track.duration),
   );
@@ -52,15 +56,30 @@ export function useAudioPlayer(enabled = true) {
     const element = audio.current;
     if (!element || !tracks.length) return;
     const token = ++request.current;
+    wantsToPlay.current = true;
+    setPlaying(true);
     try {
+      fader.current ??= createAudioFader(element);
+      const envelope = fader.current;
+      envelope.hold();
+      if (element.paused) envelope.silence();
       if (loadedIndex.current !== indexRef.current) {
         loadedIndex.current = indexRef.current;
         element.src = tracks[indexRef.current].src;
         element.load();
       }
-      await element.play();
-      if (token === request.current) setError("");
+      // Both calls start inside the user's gesture, including on mobile browsers.
+      await Promise.all([envelope.resume(), element.play()]);
+      if (token === request.current) {
+        envelope.fadeTo(volumeRef.current);
+        setError("");
+      }
     } catch (error) {
+      if (token !== request.current) return;
+      wantsToPlay.current = false;
+      setPlaying(false);
+      fader.current?.silence();
+      element.pause();
       if (
         token === request.current &&
         !(error instanceof DOMException && error.name === "AbortError")
@@ -70,14 +89,30 @@ export function useAudioPlayer(enabled = true) {
         );
     }
   }
-  function pause() {
-    ++request.current;
-    audio.current?.pause();
+  function pause(afterPause?: () => void) {
+    const token = ++request.current;
+    const element = audio.current;
+    wantsToPlay.current = false;
+    setPlaying(false);
+    const finish = () => {
+      if (token !== request.current) return;
+      element?.pause();
+      afterPause?.();
+    };
+    if (element && !element.paused && fader.current)
+      fader.current.fadeTo(0, finish);
+    else {
+      fader.current?.silence();
+      finish();
+    }
   }
   function loadTrack(next: number, autoplay = true) {
     const element = audio.current;
     if (!element || !tracks.length || !Number.isInteger(next)) return;
     ++request.current;
+    fader.current?.silence();
+    wantsToPlay.current = false;
+    setPlaying(false);
     element.pause();
     if (loadedIndex.current !== null) {
       element.removeAttribute("src");
@@ -136,9 +171,17 @@ export function useAudioPlayer(enabled = true) {
     const element = new Audio();
     audio.current = element;
     element.preload = "none";
-    element.volume = volume;
-    const onPlay = () => setPlaying(true),
-      onPause = () => setPlaying(false),
+    element.volume = volumeRef.current;
+    const onPlay = () => {
+        if (wantsToPlay.current) setPlaying(true);
+        else element.pause();
+      },
+      onPause = () => {
+        // A queued pause from the previous track may arrive after the next play.
+        if (!element.paused) return;
+        wantsToPlay.current = false;
+        setPlaying(false);
+      },
       onTime = () => {
         // Ignore reset events while switching to an as-yet-unloaded track.
         if (loadedIndex.current === null || element.readyState < 1) return;
@@ -167,6 +210,9 @@ export function useAudioPlayer(enabled = true) {
     element.addEventListener("error", onError);
     return () => {
       ++request.current;
+      wantsToPlay.current = false;
+      fader.current?.dispose();
+      fader.current = null;
       element.removeEventListener("play", onPlay);
       element.removeEventListener("pause", onPause);
       element.removeEventListener("timeupdate", onTime);
@@ -184,17 +230,18 @@ export function useAudioPlayer(enabled = true) {
     const element = audio.current;
     if (!element) return;
     if (action === "play") {
-      if (element.paused) void play();
+      if (!wantsToPlay.current) void play();
       else pause();
     }
     if (action === "stop") {
-      pause();
-      element.currentTime = 0;
-      positionRef.current = 0;
-      setPosition(0);
+      pause(() => {
+        element.currentTime = 0;
+        positionRef.current = 0;
+        setPosition(0);
+      });
     }
     if (action === "previous" || action === "next")
-      advance(action === "next" ? 1 : -1, !element.paused);
+      advance(action === "next" ? 1 : -1, wantsToPlay.current);
   }
   function seek(value: number) {
     const element = audio.current;
@@ -212,8 +259,11 @@ export function useAudioPlayer(enabled = true) {
   function setVolume(value: number) {
     if (!Number.isFinite(value)) return;
     const next = Math.max(0, Math.min(1, value));
+    volumeRef.current = next;
     setVolumeState(next);
-    if (audio.current) audio.current.volume = next;
+    if (fader.current) {
+      if (wantsToPlay.current) fader.current.fadeTo(next);
+    } else if (audio.current) audio.current.volume = next;
     try {
       localStorage.setItem(VOLUME_STORAGE_KEY, String(next));
     } catch {

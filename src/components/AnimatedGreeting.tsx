@@ -21,7 +21,7 @@ export function AnimatedGreeting() {
       setLength(remaining);
       step = window.setTimeout(
         remaining < currentGreeting.length ? type : erase,
-        remaining < currentGreeting.length ? 100 : 30_000,
+        remaining < currentGreeting.length ? 100 : 15_000,
       );
     }
     function erase() {

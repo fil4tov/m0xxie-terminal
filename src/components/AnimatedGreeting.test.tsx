@@ -8,7 +8,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("types on arrival, then pauses 30 seconds before each erase and retype cycle", () => {
+it("types on arrival, then pauses 15 seconds before each erase and retype cycle", () => {
   vi.spyOn(Math, "random").mockReturnValue(0);
   const { container, unmount } = render(<AnimatedGreeting />);
   const text = container.querySelector(".greeting-text")!;
@@ -19,7 +19,7 @@ it("types on arrival, then pauses 30 seconds before each erase and retype cycle"
   expect(text.textContent).toBe("h");
   act(() => vi.advanceTimersByTime(1_100));
   expect(text.textContent).toBe("hello, world");
-  act(() => vi.advanceTimersByTime(29_999));
+  act(() => vi.advanceTimersByTime(14_999));
   expect(text).toHaveTextContent("hello, world");
   act(() => vi.advanceTimersByTime(1));
   expect(text.textContent).toBe("hello, worl");
@@ -32,7 +32,7 @@ it("types on arrival, then pauses 30 seconds before each erase and retype cycle"
   expect(text.textContent).toBe("h");
   act(() => vi.advanceTimersByTime(1_100));
   expect(text.textContent).toBe("hello, world");
-  act(() => vi.advanceTimersByTime(30_000));
+  act(() => vi.advanceTimersByTime(15_000));
   expect(text.textContent).toBe("hello, worl");
   unmount();
   expect(vi.getTimerCount()).toBe(0);
@@ -48,7 +48,7 @@ it("always starts with hello, then randomly selects a preset after erasing", () 
   act(() => vi.advanceTimersByTime(2_100));
   expect(text.textContent).toBe("hello, world");
   expect(random).not.toHaveBeenCalled();
-  act(() => vi.advanceTimersByTime(30_000 + 715));
+  act(() => vi.advanceTimersByTime(15_000 + 715));
   expect(text).toBeEmptyDOMElement();
   act(() => vi.advanceTimersByTime(280));
   expect(text.textContent).toBe("a");
@@ -58,7 +58,7 @@ it("always starts with hello, then randomly selects a preset after erasing", () 
     screen.getByRole("heading", { name: "are you still here?" }),
   ).toBeInTheDocument();
   act(() =>
-    vi.advanceTimersByTime(30_000 + ("are you still here?".length - 1) * 65),
+    vi.advanceTimersByTime(15_000 + ("are you still here?".length - 1) * 65),
   );
   expect(text).toBeEmptyDOMElement();
   act(() => vi.advanceTimersByTime(280 + 1_100));

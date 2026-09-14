@@ -7,6 +7,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { commands, resolveCommand, type CommandResult } from "../lib/commands";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { TerminalInput } from "./TerminalInput";
@@ -34,7 +35,7 @@ export interface TerminalHandle {
 export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
   function Terminal({ onListen }, ref) {
     const [value, setValue] = useState(""),
-      [menu, setMenu] = useState(false),
+      [menu, setMenu] = useState<false | "all" | "filtered">(false),
       [selected, setSelected] = useState(0),
       [entries, setEntries] = useState<Entry[]>([]);
     const input = useRef<HTMLInputElement>(null),
@@ -48,16 +49,49 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
     useEffect(() => {
       listenRef.current = onListen;
     }, [onListen]);
-    const filtered = commands.filter((c) =>
-      c.name.startsWith(value.trim().toLowerCase().slice(1)),
-    );
-    const showMenu = menu && value.trim().startsWith("/");
+    const filtered =
+      menu === "all"
+        ? commands
+        : commands.filter((c) =>
+            c.name.startsWith(value.trim().toLowerCase().slice(1)),
+          );
+    const showMenu =
+      menu === "all" || (menu === "filtered" && value.trim().startsWith("/"));
     const active = entries.find((entry) => !entry.done);
     const focus = () => input.current?.focus({ preventScroll: true });
+    function insertText(text: string) {
+      const element = input.current;
+      if (!element) return;
+      const start = element.selectionStart ?? element.value.length;
+      const end = element.selectionEnd ?? start;
+      const room =
+        element.maxLength < 0
+          ? text.length
+          : Math.max(0, element.maxLength - element.value.length + end - start);
+      const inserted = text.slice(0, room);
+      const next =
+        element.value.slice(0, start) + inserted + element.value.slice(end);
+      // Commit before focusing so React does not move the restored caret to the end.
+      flushSync(() => {
+        setValue(next);
+        setSelected(0);
+        setMenu("filtered");
+      });
+      element.setSelectionRange(
+        start + inserted.length,
+        start + inserted.length,
+      );
+      element.focus({ preventScroll: true });
+    }
     function reset() {
       setEntries([]);
       setValue("");
       setMenu(false);
+      focus();
+    }
+    function toggleMenu() {
+      setMenu(showMenu ? false : "all");
+      setSelected(0);
       focus();
     }
     function execute(raw: string) {
@@ -118,32 +152,41 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
       if (chat.current) chat.current.scrollTop = chat.current.scrollHeight;
     }, [entries, showMenu, filtered.length]);
     useEffect(() => {
-      // Restore focus after clicks so controls finish handling their action first.
-      function focusInput() {
-        input.current?.focus({ preventScroll: true });
-      }
-      focusInput();
-      document.addEventListener("click", focusInput);
-      return () => document.removeEventListener("click", focusInput);
+      input.current?.focus({ preventScroll: true });
     }, []);
     useEffect(() => {
-      function slash(event: globalThis.KeyboardEvent) {
+      function resumeTyping(event: globalThis.KeyboardEvent) {
+        const element = input.current;
         const target = event.target;
         if (
-          event.key !== "/" ||
+          !element ||
+          target === element ||
+          event.defaultPrevented ||
+          event.isComposing ||
+          event.keyCode === 229 ||
+          event.key.length !== 1 ||
           event.ctrlKey ||
           event.metaKey ||
-          event.altKey ||
-          (target instanceof HTMLElement &&
-            (target.matches("input, textarea, select") ||
-              target.isContentEditable))
+          event.altKey
         )
           return;
+        if (target instanceof Element) {
+          const editable = target.closest("[contenteditable]");
+          if (
+            target.closest('input:not([type="range"]), textarea, select') ||
+            (editable &&
+              editable.getAttribute("contenteditable") !== "false") ||
+            (event.key === " " &&
+              target.closest(
+                'button, a[href], input, summary, [role="button"], [role="slider"], [role="checkbox"], [role="switch"]',
+              ))
+          )
+            return;
+        }
+
+        // Transfer the first character ourselves: its keydown targeted another element.
         event.preventDefault();
-        setValue("/");
-        setSelected(0);
-        setMenu(true);
-        input.current?.focus({ preventScroll: true });
+        insertText(event.key);
       }
       function outside(event: PointerEvent) {
         const target = event.target as Node;
@@ -153,10 +196,10 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
         )
           setMenu(false);
       }
-      document.addEventListener("keydown", slash);
+      document.addEventListener("keydown", resumeTyping);
       document.addEventListener("pointerdown", outside);
       return () => {
-        document.removeEventListener("keydown", slash);
+        document.removeEventListener("keydown", resumeTyping);
         document.removeEventListener("pointerdown", outside);
       };
     }, []);
@@ -256,15 +299,7 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
               <div className="prompt-area" ref={prompt}>
                 <p className="input-hint" hidden={entries.length > 0}>
                   Введи{" "}
-                  <button
-                    aria-label="Показать команды"
-                    onClick={() => {
-                      setValue("/");
-                      setSelected(0);
-                      setMenu(true);
-                      focus();
-                    }}
-                  >
+                  <button aria-label="Показать команды" onClick={toggleMenu}>
                     /
                   </button>
                   , чтобы начать.
@@ -342,20 +377,35 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
                   onChange={(event) => {
                     setValue(event.target.value);
                     setSelected(0);
-                    setMenu(true);
+                    setMenu("filtered");
                   }}
                   onKeyDown={onKey}
                   spellCheck={false}
                   autoCapitalize="off"
                   maxLength={120}
                 />
-                <button
-                  type="submit"
-                  className="enter-button"
-                  aria-label="Выполнить команду"
-                >
-                  <FiCornerDownLeft aria-hidden="true" />
-                </button>
+                <div className="terminal-actions">
+                  <button
+                    type="button"
+                    className="slash-button"
+                    aria-label="Меню команд"
+                    aria-controls="suggestions"
+                    aria-expanded={showMenu}
+                    aria-haspopup="listbox"
+                    title={showMenu ? "Закрыть команды" : "Открыть команды"}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={toggleMenu}
+                  >
+                    /
+                  </button>
+                  <button
+                    type="submit"
+                    className="enter-button"
+                    aria-label="Выполнить команду"
+                  >
+                    <FiCornerDownLeft aria-hidden="true" />
+                  </button>
+                </div>
               </form>
             </div>
             <div className="terminal-bottom">

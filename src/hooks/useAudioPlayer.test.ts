@@ -78,60 +78,266 @@ class TestAudio extends EventTarget {
     if (name === "src") this.src = "";
   }
 }
+
+// Record the Web Audio boundary: gain automation and context lifecycle.
+class TestAudioContext {
+  static instances: TestAudioContext[] = [];
+  private started = Date.now();
+  state = "suspended";
+  destination = {};
+  gain = {
+    value: 1,
+    cancelScheduledValues: vi.fn(),
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+  };
+  node = { gain: this.gain, connect: vi.fn(), disconnect: vi.fn() };
+  source = { connect: vi.fn(), disconnect: vi.fn() };
+  constructor() {
+    TestAudioContext.instances.push(this);
+  }
+  get currentTime() {
+    return (Date.now() - this.started) / 1000;
+  }
+  createGain() {
+    return this.node;
+  }
+  createMediaElementSource() {
+    return this.source;
+  }
+  async resume() {
+    this.state = "running";
+  }
+  async close() {
+    this.state = "closed";
+  }
+}
 describe("audio transport", () => {
   beforeEach(() => {
     TestAudio.instances = [];
     TestAudio.sources = [];
+    TestAudioContext.instances = [];
+    localStorage.clear();
     vi.stubGlobal("Audio", TestAudio);
+    vi.stubGlobal("AudioContext", TestAudioContext);
+  });
+  it("fades in, fades to silence before pausing, and keeps the user's volume", async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useAudioPlayer);
+    act(() => result.current.setVolume(0.6));
+    expect(TestAudioContext.instances).toHaveLength(0);
+    await act(async () => result.current.transport("play"));
+    const context = TestAudioContext.instances[0];
+    const media = TestAudio.instances[0];
+    expect(context).toBeDefined();
+    expect(context.gain.setValueAtTime).toHaveBeenCalledWith(0, 0);
+    expect(context.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
+      0.6,
+      0.04,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    act(() => result.current.pause());
+    expect(result.current.playing).toBe(false);
+    expect(media.paused).toBe(false);
+    expect(context.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
+      0,
+      0.14,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    expect(media.paused).toBe(false);
+    await act(() => vi.advanceTimersByTimeAsync(80));
+    expect(media.paused).toBe(true);
+    expect(result.current.volume).toBe(0.6);
+    expect(localStorage.getItem("m0xxie-player-volume")).toBe("0.6");
+    await act(async () => result.current.transport("play"));
+    expect(context.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(
+      0.6,
+      expect.closeTo(0.24),
+    );
+  });
+  it("reverses a pending fade-out on a quick second click without a delayed pause", async () => {
+    vi.useFakeTimers();
+    const { result, unmount } = renderHook(useAudioPlayer);
+    await act(async () => result.current.transport("play"));
+    const context = TestAudioContext.instances[0];
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    act(() => result.current.transport("play"));
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    await act(async () => result.current.transport("play"));
+    expect(context).toBeDefined();
+    expect(context.gain.setValueAtTime).toHaveBeenLastCalledWith(
+      expect.closeTo(0.25),
+      0.12,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(result.current.playing).toBe(true);
+    expect(TestAudio.instances[0].paused).toBe(false);
+    expect(TestAudio.sources).toEqual(["/audio/better.mp3"]);
+    act(() => result.current.pause());
+    unmount();
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(context.state).toBe("closed");
+    expect(TestAudio.instances[0].paused).toBe(true);
+  });
+  it("finishes fading before Stop resets the playback position", async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useAudioPlayer);
+    await act(async () => result.current.transport("play"));
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    act(() => result.current.seek(42));
+    act(() => result.current.transport("stop"));
+    expect(TestAudio.instances[0].currentTime).toBe(42);
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(TestAudio.instances[0].paused).toBe(true);
+    expect(result.current.position).toBe(0);
+    expect(TestAudio.instances[0].currentTime).toBe(0);
+  });
+  it("keeps a new track playing when the old fade-out or a queued pause finishes", async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useAudioPlayer);
+    await act(async () => result.current.transport("play"));
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    act(() => result.current.pause());
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    await act(async () => result.current.choose(1, true));
+    // The browser queues media events rather than dispatching them synchronously.
+    act(() => TestAudio.instances[0].dispatchEvent(new Event("pause")));
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(result.current.playing).toBe(true);
+    expect(result.current.track?.title).toBe("free my mind");
+    expect(TestAudio.instances[0].paused).toBe(false);
+  });
+  it("does not resume playback when a pending Play completes after Pause", async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useAudioPlayer);
+    const media = TestAudio.instances[0];
+    const originalPlay = media.play.bind(media);
+    let finishPlay!: () => void;
+    vi.spyOn(media, "play").mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        finishPlay = resolve;
+      });
+      await originalPlay();
+    });
+    act(() => result.current.transport("play"));
+    act(() => result.current.transport("play"));
+    await act(async () => finishPlay());
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(result.current.playing).toBe(false);
+    expect(media.paused).toBe(true);
+    expect(
+      TestAudioContext.instances[0].gain.linearRampToValueAtTime,
+    ).not.toHaveBeenCalled();
+  });
+  it("changing volume during fade-out preserves the pause and applies on resume", async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useAudioPlayer);
+    await act(async () => result.current.transport("play"));
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    act(() => result.current.pause());
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    act(() => result.current.setVolume(0.2));
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(TestAudio.instances[0].paused).toBe(true);
+    await act(async () => result.current.transport("play"));
+    expect(
+      TestAudioContext.instances[0].gain.linearRampToValueAtTime,
+    ).toHaveBeenLastCalledWith(0.2, expect.any(Number));
+    expect(localStorage.getItem("m0xxie-player-volume")).toBe("0.2");
+  });
+  it("falls back to gradual media volume changes when Web Audio is unavailable", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("AudioContext", undefined);
+    const { result } = renderHook(useAudioPlayer);
+    await act(async () => result.current.transport("play"));
+    const media = TestAudio.instances[0];
+    expect(media.volume).toBe(0);
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    expect(media.volume).toBeGreaterThan(0);
+    expect(media.volume).toBeLessThan(0.5);
+    await act(() => vi.advanceTimersByTimeAsync(80));
+    expect(media.volume).toBe(0.5);
+    act(() => result.current.pause());
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    expect(media.paused).toBe(false);
+    expect(media.volume).toBeGreaterThan(0);
+    expect(media.volume).toBeLessThan(0.5);
+    await act(() => vi.advanceTimersByTimeAsync(80));
+    expect(media.volume).toBe(0);
+    expect(media.paused).toBe(true);
+    expect(result.current.volume).toBe(0.5);
   });
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
-  it("shows durations on opening, loads only on Play and preserves audio on reopening", async () => {
-    vi.useFakeTimers();
-    render(createElement(App));
-    await act(() => vi.advanceTimersByTimeAsync(3000));
-    expect(TestAudio.instances).toHaveLength(0);
-    expect(TestAudio.sources).toEqual([]);
-
-    const openPlayer = async () => {
-      const input = screen.getByRole("combobox");
-      fireEvent.change(input, { target: { value: "/player" } });
-      fireEvent.submit(input.closest("form")!);
+  it.each(["better", "voyage"])(
+    "plays %s on first click, toggles pause without restarting and preserves audio on reopening",
+    async (title) => {
+      vi.useFakeTimers();
+      render(createElement(App));
       await act(() => vi.advanceTimersByTimeAsync(3000));
-    };
-    await openPlayer();
-    const media = TestAudio.instances[0];
-    expect(TestAudio.instances).toHaveLength(1);
-    expect(TestAudio.sources).toEqual([]);
-    expect(
-      screen.getByRole("button", { name: "Выбрать better" }),
-    ).toHaveTextContent("2:00");
-    fireEvent.click(screen.getByRole("button", { name: "Выбрать voyage" }));
-    expect(TestAudio.sources).toEqual([]);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Воспроизвести" }));
-    });
-    expect(TestAudio.sources).toEqual(["/audio/voyage.mp3"]);
-    act(() => {
-      media.dispatchEvent(new Event("loadedmetadata"));
-      media.currentTime = 42;
-      media.dispatchEvent(new Event("timeupdate"));
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Закрыть плеер" }));
-    await openPlayer();
-    expect(TestAudio.instances).toHaveLength(1);
-    expect(
-      screen.getByRole("slider", { name: "Позиция воспроизведения" }),
-    ).toHaveValue("42");
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Воспроизвести" }));
-    });
-    expect(media.paused).toBe(false);
-    expect(TestAudio.sources).toEqual(["/audio/voyage.mp3"]);
-  });
+      expect(TestAudio.instances).toHaveLength(0);
+      expect(TestAudio.sources).toEqual([]);
+
+      const openPlayer = async () => {
+        const input = screen.getByRole("combobox");
+        fireEvent.change(input, { target: { value: "/player" } });
+        fireEvent.submit(input.closest("form")!);
+        await act(() => vi.advanceTimersByTimeAsync(3000));
+      };
+      await openPlayer();
+      const media = TestAudio.instances[0];
+      expect(TestAudio.instances).toHaveLength(1);
+      expect(TestAudio.sources).toEqual([]);
+      expect(
+        screen.getByRole("button", { name: "Выбрать better" }),
+      ).toHaveTextContent("2:00");
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: `Выбрать ${title}` }),
+        );
+      });
+      expect(TestAudio.sources).toEqual([`/audio/${title}.mp3`]);
+      expect(media.paused).toBe(false);
+      expect(screen.getByRole("button", { name: "Пауза" })).toBeInTheDocument();
+      act(() => {
+        media.dispatchEvent(new Event("loadedmetadata"));
+        media.currentTime = 42;
+        media.dispatchEvent(new Event("timeupdate"));
+      });
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: `Выбрать ${title}` }),
+        );
+      });
+      expect(media.paused).toBe(true);
+      expect(media.currentTime).toBe(42);
+      expect(
+        screen.getByRole("button", { name: "Воспроизвести" }),
+      ).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: `Выбрать ${title}` }),
+        );
+      });
+      expect(media.paused).toBe(false);
+      expect(media.currentTime).toBe(42);
+      expect(TestAudio.sources).toEqual([`/audio/${title}.mp3`]);
+      fireEvent.click(screen.getByRole("button", { name: "Закрыть плеер" }));
+      await openPlayer();
+      expect(TestAudio.instances).toHaveLength(1);
+      expect(
+        screen.getByRole("slider", { name: "Позиция воспроизведения" }),
+      ).toHaveValue("42");
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Воспроизвести" }));
+      });
+      expect(media.paused).toBe(false);
+      expect(TestAudio.sources).toEqual([`/audio/${title}.mp3`]);
+    },
+  );
   it("shuffles through every track, keeps back/forward history and preserves pause", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.99);
     const { result } = renderHook(useAudioPlayer);
