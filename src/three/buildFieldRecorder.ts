@@ -212,6 +212,7 @@ export function buildFieldRecorder(group: THREE.Group) {
     const icon = label(glyph, w * 0.52, h * 0.44, 0, 0, 0.081, glyphColor);
     group.remove(icon);
     button.add(icon);
+    return button;
   }
   function cable(points: number[][], color: string, radius = 0.018) {
     const curve = new THREE.CatmullRomCurve3(
@@ -356,7 +357,7 @@ export function buildFieldRecorder(group: THREE.Group) {
     ["next", "▶▶"],
   ].forEach(([action, glyph], i) => {
     const x = -0.35 + i * 0.52;
-    key(
+    const button = key(
       action as TransportAction,
       glyph,
       x,
@@ -368,7 +369,17 @@ export function buildFieldRecorder(group: THREE.Group) {
       action === "play" ? "#292b22" : "#d9d0b0",
     );
     for (let j = 0; j < 4; j++)
-      box(0.36, 0.006, 0.007, x, -1.03 + j * 0.022, 0.57, rubber, 0.001);
+      box(
+        0.36,
+        0.006,
+        0.007,
+        0,
+        -0.14 + j * 0.022,
+        0.08,
+        rubber,
+        0.001,
+        button,
+      );
   });
   led.position.set(1.78, -0.65, 0.43);
   label("REC", 0.22, 0.07, 1.74, -0.49, 0.423, "#992f24");

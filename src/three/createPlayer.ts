@@ -46,6 +46,9 @@ export function createPlayer(
   scene.add(group);
   const { reels, buttons, led } = buildFieldRecorder(group);
   group.rotation.set(0.13, -0.42, -0.055);
+  const targetRotation = group.quaternion.clone(),
+    dragRotation = new THREE.Quaternion(),
+    dragAxis = new THREE.Vector3();
   scene.environmentIntensity = 1.05;
   let playing = false,
     visible = true,
@@ -53,8 +56,6 @@ export function createPlayer(
     startX = 0,
     startY = 0,
     moved = false,
-    targetX = group.rotation.x,
-    targetY = group.rotation.y,
     lastTime = 0,
     raf = 0;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -78,7 +79,15 @@ export function createPlayer(
       (-(e.clientY - r.top) / r.height) * 2 + 1,
     );
     raycaster.setFromCamera(pointer, camera);
-    return raycaster.intersectObjects(buttons, false)[0]?.object;
+    let object: THREE.Object3D | undefined = raycaster.intersectObject(
+      group,
+      true,
+    )[0]?.object;
+    while (object && object !== group) {
+      if (buttons.includes(object as THREE.Mesh)) return object;
+      object = object.parent ?? undefined;
+    }
+    return undefined;
   }
   renderer.domElement.addEventListener(
     "pointerdown",
@@ -99,8 +108,14 @@ export function createPlayer(
           dy = e.clientY - startY;
         if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
         if (moved) {
-          targetY = Math.max(-1.1, Math.min(1.1, targetY + dx * 0.007));
-          targetX = Math.max(-0.65, Math.min(0.6, targetX + dy * 0.005));
+          // Apply each drag around fixed axes so turning stays responsive
+          // even when the recorder is upside down or viewed from behind.
+          dragAxis.set(dy * 0.005, dx * 0.007, 0);
+          const angle = dragAxis.length();
+          if (angle > 0) {
+            dragRotation.setFromAxisAngle(dragAxis.normalize(), angle);
+            targetRotation.premultiply(dragRotation).normalize();
+          }
           startX = e.clientX;
           startY = e.clientY;
         }
@@ -140,8 +155,7 @@ export function createPlayer(
     if (disposed || !visible || document.hidden) return;
     const dt = Math.min((t - lastTime) / 1000, 0.05);
     lastTime = t;
-    group.rotation.x += (targetX - group.rotation.x) * 0.12;
-    group.rotation.y += (targetY - group.rotation.y) * 0.12;
+    group.quaternion.slerp(targetRotation, 0.12);
     if (!reduced) {
       if (playing) reels.forEach((r) => (r.rotation.z -= dt * 1.7));
     }

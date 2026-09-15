@@ -540,7 +540,7 @@ h1 {
   position: absolute;
   inset: 0;
   cursor: grab;
-  touch-action: pan-y;
+  touch-action: none;
 }
 #player-canvas:active {
   cursor: grabbing;
