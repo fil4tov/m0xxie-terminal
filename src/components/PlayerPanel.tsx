@@ -115,19 +115,23 @@ export function PlayerPanel({
             <FiShuffle aria-hidden="true" />
           </button>
         </div>
-        <label className="volume-label">
-          <span>VOL</span>
-          <input
-            id="volume"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={player.volume}
-            onChange={(event) => player.setVolume(Number(event.target.value))}
-            aria-label="Громкость"
-          />
-        </label>
+        {player.systemVolume ? (
+          <span className="volume-label">Громкость — кнопками телефона</span>
+        ) : (
+          <label className="volume-label">
+            <span>VOL</span>
+            <input
+              id="volume"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={player.volume}
+              onChange={(event) => player.setVolume(Number(event.target.value))}
+              aria-label="Громкость"
+            />
+          </label>
+        )}
       </div>
       <TrackList player={player} />
       {player.error && (

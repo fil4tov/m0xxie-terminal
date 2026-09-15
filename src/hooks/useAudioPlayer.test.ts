@@ -8,6 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAudioPlayer } from "./useAudioPlayer";
 import App from "../App";
+import { PlayerPanel } from "../components/PlayerPanel";
 import { createElement } from "react";
 
 const library = vi.hoisted(() => [
@@ -120,6 +121,156 @@ describe("audio transport", () => {
     localStorage.clear();
     vi.stubGlobal("Audio", TestAudio);
     vi.stubGlobal("AudioContext", TestAudioContext);
+  });
+  it("uses native audio on touch devices and advances in the background without timers", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("navigator", { maxTouchPoints: 5, platform: "MacIntel" });
+    const { result } = renderHook(useAudioPlayer);
+    await act(async () => result.current.transport("play"));
+    const media = TestAudio.instances[0];
+    expect(TestAudioContext.instances).toHaveLength(0);
+    expect(media.volume).toBe(1);
+    expect(media.paused).toBe(false);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(media.paused).toBe(false);
+    await act(async () => media.dispatchEvent(new Event("ended")));
+    expect(result.current.track?.title).toBe("free my mind");
+    expect(media.paused).toBe(false);
+    expect(media.volume).toBe(1);
+    act(() => result.current.pause());
+    expect(media.paused).toBe(true);
+  });
+  it("publishes lock-screen metadata and handles play, pause, skip and seek", async () => {
+    const handlers = new Map<string, MediaSessionActionHandler>();
+    const session = {
+      metadata: null as MediaMetadataInit | null,
+      playbackState: "none",
+      setPositionState: vi.fn(),
+      setActionHandler: vi.fn(
+        (action: string, handler: MediaSessionActionHandler | null) => {
+          if (handler) handlers.set(action, handler);
+          else handlers.delete(action);
+        },
+      ),
+    };
+    const audioSession = { type: "auto" };
+    vi.stubGlobal("navigator", {
+      maxTouchPoints: 5,
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+      mediaSession: session,
+      audioSession,
+    });
+    vi.stubGlobal(
+      "MediaMetadata",
+      class {
+        constructor(data: MediaMetadataInit) {
+          Object.assign(this, data);
+        }
+      },
+    );
+    const { result, unmount } = renderHook(useAudioPlayer);
+    expect(TestAudio.sources).toEqual([]);
+    await act(async () => result.current.transport("play"));
+    expect(audioSession.type).toBe("playback");
+    expect(session.metadata).toMatchObject({
+      title: "better",
+      artist: "m0xxie",
+    });
+    expect(session.playbackState).toBe("playing");
+    act(() => handlers.get("pause")!({ action: "pause" }));
+    expect(TestAudio.instances[0].paused).toBe(true);
+    expect(session.playbackState).toBe("paused");
+    await act(async () => handlers.get("play")!({ action: "play" }));
+    await act(async () => handlers.get("play")!({ action: "play" }));
+    expect(TestAudio.instances[0].paused).toBe(false);
+    await act(async () => handlers.get("nexttrack")!({ action: "nexttrack" }));
+    expect(session.metadata).toMatchObject({ title: "free my mind" });
+    act(() => handlers.get("seekto")!({ action: "seekto", seekTime: 42 }));
+    expect(TestAudio.instances[0].currentTime).toBe(42);
+    expect(session.setPositionState).toHaveBeenLastCalledWith({
+      duration: 240,
+      playbackRate: 1,
+      position: 42,
+    });
+    await act(async () =>
+      handlers.get("previoustrack")!({ action: "previoustrack" }),
+    );
+    expect(result.current.track?.title).toBe("better");
+    act(() => handlers.get("stop")!({ action: "stop" }));
+    expect(TestAudio.instances[0].paused).toBe(true);
+    expect(result.current.position).toBe(0);
+    unmount();
+    expect(handlers.size).toBe(0);
+    expect(session.metadata).toBeNull();
+    expect(session.playbackState).toBe("none");
+    expect(audioSession.type).toBe("auto");
+  });
+  it("keeps native playback usable when optional media session APIs reject calls", async () => {
+    const unsupported = () => {
+      throw new DOMException("Unsupported", "NotSupportedError");
+    };
+    const session = {
+      metadata: null,
+      playbackState: "none",
+      setActionHandler: vi.fn(unsupported),
+      setPositionState: vi.fn(unsupported),
+    };
+    vi.stubGlobal("navigator", {
+      maxTouchPoints: 5,
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+      mediaSession: session,
+      audioSession: {
+        get type() {
+          return "auto";
+        },
+        set type(_: string) {
+          unsupported();
+        },
+      },
+    });
+    const { result, rerender, unmount } = renderHook(
+      ({ enabled }) => useAudioPlayer(enabled),
+      { initialProps: { enabled: false } },
+    );
+    expect(session.setActionHandler).not.toHaveBeenCalled();
+    rerender({ enabled: true });
+    await act(async () => result.current.transport("play"));
+    expect(result.current.error).toBe("");
+    expect(TestAudio.instances[0].paused).toBe(false);
+    act(() => result.current.pause());
+    expect(TestAudio.instances[0].paused).toBe(true);
+    expect(() => unmount()).not.toThrow();
+  });
+  it("uses the iPhone volume buttons instead of displaying an ineffective slider", () => {
+    vi.stubGlobal("navigator", { userAgent: "iPhone", maxTouchPoints: 5 });
+    localStorage.setItem("m0xxie-player-volume", "0");
+    const { result } = renderHook(useAudioPlayer);
+    render(
+      createElement(PlayerPanel, { player: result.current, onClose: vi.fn() }),
+    );
+    expect(
+      screen.queryByRole("slider", { name: "Громкость" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Громкость — кнопками телефона"),
+    ).toBeInTheDocument();
+    expect(result.current.volume).toBe(1);
+    expect(localStorage.getItem("m0xxie-player-volume")).toBe("0");
+  });
+  it("preserves Web Audio fades on touchscreen desktops using a mouse", async () => {
+    vi.stubGlobal("navigator", {
+      userAgent: "Windows",
+      platform: "Win32",
+      maxTouchPoints: 10,
+    });
+    const { result } = renderHook(useAudioPlayer);
+    await act(async () => result.current.transport("play"));
+    expect(result.current.systemVolume).toBe(false);
+    expect(TestAudioContext.instances).toHaveLength(1);
+    expect(
+      TestAudioContext.instances[0].gain.linearRampToValueAtTime,
+    ).toHaveBeenCalled();
   });
   it("restores saved order, skips missing or duplicate tracks, and appends new tracks", () => {
     localStorage.setItem(

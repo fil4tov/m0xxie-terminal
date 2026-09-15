@@ -6,16 +6,16 @@
 :root {
   font-family: Terminal, "Courier New", monospace;
   color-scheme: dark;
-  --bg: #0d110f;
-  --panel: #111b15;
-  --screen: #0b150f;
-  --ink: #b4f5bb;
-  --muted: #74957d;
-  --line: #294332;
-  --accent: #b2ffbf;
+  --bg: #080d0a;
+  --panel: #0c160f;
+  --screen: #070f0a;
+  --ink: #9ae9a6;
+  --muted: #8d9587;
+  --line: #40654b;
+  --accent: #9cffad;
   --warm: #c6c8b5;
-  --surface: #1a241d;
-  --glow: rgba(122, 247, 146, 0.09);
+  --surface: #111e15;
+  --glow: rgba(58, 167, 89, 0.1);
   --bodyfont: Terminal, "Courier New", monospace;
 }
 * {
@@ -97,8 +97,8 @@ main {
 }
 .terminal-bezel {
   padding: 16px;
-  background: linear-gradient(145deg, #253027, #151c17 42%, #1d2820);
-  border: 1px solid #344238;
+  background: linear-gradient(145deg, #1c241c, #101711 42%, #172019);
+  border: 1px solid #4b594b;
   border-radius: 17px;
   box-shadow:
     0 25px 70px #0006,
@@ -147,7 +147,7 @@ main {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at center, #10261855, transparent 85%),
+    radial-gradient(ellipse at center, #0c211333, transparent 85%),
     var(--screen);
   padding: 22px var(--screen-inset) 21px;
   border: 1px solid var(--line);
@@ -214,12 +214,13 @@ main {
   margin: 0 0 15px;
 }
 h1 {
+  color: var(--accent);
   font-size: clamp(32px, 3.8vw, 50px);
   line-height: 1.08;
   letter-spacing: -0.055em;
   margin: 0 0 20px;
   font-weight: 400;
-  text-shadow: 0 0 18px #a6ffa52a;
+  text-shadow: 0 0 12px #8dff9d1c;
 }
 .greeting-title {
   display: grid;
@@ -234,8 +235,7 @@ h1 {
   font-size: 14px;
   line-height: 1.8;
   margin: 0;
-  color: var(--ink);
-  opacity: 0.8;
+  color: var(--accent);
 }
 .terminal-divider {
   border-top: 1px dashed var(--line);
@@ -321,8 +321,8 @@ h1 {
   align-items: center;
   flex-shrink: 0;
   padding: 2px;
-  background: #17271c;
-  border: 1px solid #3f5d48;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 7px;
 }
 .terminal-actions button {
@@ -339,7 +339,7 @@ h1 {
 }
 .terminal-actions .slash-button {
   font-size: 15px;
-  border-right: 1px solid #35513e;
+  border-right: 1px solid var(--line);
   border-radius: 4px 0 0 4px;
 }
 .terminal-actions .enter-button {
@@ -347,11 +347,11 @@ h1 {
 }
 .terminal-actions button:hover,
 .terminal-actions .slash-button[aria-expanded="true"] {
-  background: var(--line);
+  background: #1c3524;
   color: var(--accent);
 }
 .terminal-actions button:active {
-  background: #365941;
+  background: #284b32;
 }
 .terminal-actions button:focus-visible {
   outline-offset: -2px;
@@ -691,11 +691,11 @@ input[type="range"] {
   transition: box-shadow 0.3s ease;
 }
 .track-row[data-dragging="true"] {
-  background-color: rgba(17, 27, 21, 0.9);
+  background-color: rgba(12, 22, 15, 0.94);
   backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow:
-    inset 0 0 1px rgba(178, 255, 191, 0.5),
+    inset 0 0 1px rgba(156, 255, 173, 0.5),
     -1px 0 15px rgba(0, 0, 0, 0.01),
     0 15px 15px rgba(0, 0, 0, 0.25);
   z-index: 2;
@@ -766,10 +766,10 @@ input[type="range"] {
 }
 @media (hover: hover) {
   .track:hover {
-    background-color: rgba(122, 247, 146, 0.05);
+    background-color: rgba(58, 167, 89, 0.07);
   }
   .track[aria-pressed="true"]:hover {
-    background-color: rgba(122, 247, 146, 0.14);
+    background-color: rgba(58, 167, 89, 0.16);
   }
 }
 #audio-error {

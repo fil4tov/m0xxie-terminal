@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Terminal } from "./Terminal";
-import { links, musicLinks } from "../config";
+import { musicLinks, telegramLinks } from "../config";
 
 describe("Terminal", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -42,6 +42,34 @@ describe("Terminal", () => {
     expect(input).toHaveValue("abXYcd");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
+  it.each(["Меню команд", "Показать команды"])(
+    "does not focus the input when %s is tapped on a touch device",
+    (name) => {
+      const matchMedia = window.matchMedia;
+      vi.stubGlobal("matchMedia", (query: string) => ({
+        ...matchMedia(query),
+        matches: query === "(pointer: coarse)",
+      }));
+      try {
+        render(<Terminal onListen={vi.fn()} />);
+        const input = screen.getByRole("combobox") as HTMLInputElement;
+        fireEvent.change(input, { target: { value: "hello" } });
+        act(() => input.blur());
+        const focus = vi.spyOn(input, "focus");
+        const button = screen.getByRole("button", { name });
+        fireEvent.pointerDown(button);
+        fireEvent.click(button);
+        expect(screen.getByRole("listbox")).toBeInTheDocument();
+        expect(input).not.toHaveFocus();
+        expect(input).toHaveValue("hello");
+        fireEvent.click(button);
+        expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+        expect(focus).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
   it("closes the command menu with Escape or outside clicks and filters when typing resumes", () => {
     render(<Terminal onListen={vi.fn()} />);
     const input = screen.getByRole("combobox");
@@ -282,25 +310,42 @@ describe("Terminal", () => {
       screen.getByRole("link", { name: "github.com/fil4tov" }),
     ).toHaveAttribute("href", "https://github.com/fil4tov");
   });
+  it("prints the Telegram heading and both configured links", async () => {
+    render(<Terminal onListen={vi.fn()} />);
+    submit("/telegram");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(screen.getByRole("log")).toHaveTextContent("Мои Telegram ссылки");
+    const renderedLinks = screen.getAllByRole("link");
+    expect(renderedLinks).toHaveLength(2);
+    expect(renderedLinks[0]).toHaveAccessibleName("Мой Telegram • @fil4tov");
+    expect(renderedLinks[0]).toHaveAttribute("href", "https://t.me/fil4tov");
+    expect(renderedLinks[1]).toHaveAccessibleName("Паблик с музыкой • @m0xxie");
+    expect(renderedLinks[1]).toHaveAttribute("href", "https://t.me/m0xxie");
+  });
   it("supports a Telegram placeholder and uses the configured profile link", async () => {
-    const originalUrl = links.telegram.url;
+    const originalUrl = telegramLinks[0].url;
     try {
-      links.telegram.url = "";
+      telegramLinks[0].url = "";
       render(<Terminal onListen={vi.fn()} />);
       submit("/telegram");
       await act(() => vi.advanceTimersByTimeAsync(2000));
-      expect(screen.getByRole("log")).toHaveTextContent(links.telegram.note);
-      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+      expect(screen.getByRole("log")).toHaveTextContent(telegramLinks[0].label);
+      expect(
+        screen.queryByRole("link", { name: telegramLinks[0].label }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: telegramLinks[1].label }),
+      ).toHaveAttribute("href", "https://t.me/m0xxie");
       submit("/clear");
-      links.telegram.url = "https://example.com/telegram-profile";
+      telegramLinks[0].url = "https://example.com/telegram-profile";
       submit("/telegram");
       await act(() => vi.advanceTimersByTimeAsync(2000));
-      expect(screen.getByRole("link", { name: "Telegram" })).toHaveAttribute(
-        "href",
-        links.telegram.url,
-      );
+      expect(
+        screen.getByRole("link", { name: telegramLinks[0].label }),
+      ).toHaveAttribute("href", telegramLinks[0].url);
     } finally {
-      links.telegram.url = originalUrl;
+      telegramLinks[0].url = originalUrl;
     }
   });
   it("prints music links sequentially with each platform's own address", async () => {
@@ -377,12 +422,10 @@ describe("Terminal", () => {
   it.each(["myip", "/myip"])(
     "fetches the public IP only when %s is executed",
     async (command) => {
-      const fetchIp = vi
-        .fn()
-        .mockResolvedValue({
-          ok: true,
-          json: async () => ({ ip: "2001:db8::42" }),
-        });
+      const fetchIp = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ip: "2001:db8::42" }),
+      });
       vi.stubGlobal("fetch", fetchIp);
       render(<Terminal onListen={vi.fn()} />);
       expect(fetchIp).not.toHaveBeenCalled();
@@ -404,12 +447,10 @@ describe("Terminal", () => {
         "fetch",
         failure === "network"
           ? vi.fn().mockRejectedValue(new Error("Offline"))
-          : vi
-              .fn()
-              .mockResolvedValue({
-                ok: failure !== "http",
-                json: async () => ({}),
-              }),
+          : vi.fn().mockResolvedValue({
+              ok: failure !== "http",
+              json: async () => ({}),
+            }),
       );
       render(<Terminal onListen={vi.fn()} />);
       submit("myip");

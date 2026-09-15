@@ -13,11 +13,11 @@ import { useReducedMotion } from "../hooks/useReducedMotion";
 import { TerminalInput } from "./TerminalInput";
 import { CommandSuggestions } from "./CommandSuggestions";
 import { AnimatedGreeting } from "./AnimatedGreeting";
+import { FaUndo } from "react-icons/fa";
 import {
   FiChevronRight,
   FiCornerDownLeft,
   FiExternalLink,
-  FiRotateCcw,
   FiSquare,
 } from "react-icons/fi";
 
@@ -103,7 +103,8 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
     function toggleMenu() {
       setMenu(showMenu ? false : "all");
       setSelected(0);
-      focus();
+      // Focusing an input during a tap opens the phone's software keyboard.
+      if (!window.matchMedia("(pointer: coarse)").matches) focus();
     }
     async function fetchIp(id: number) {
       const controller = new AbortController();
@@ -297,7 +298,7 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
             </span>
             <span>v.1.0 / LOCAL SESSION</span>
             <button aria-label="Очистить терминал" onClick={reset}>
-              <FiRotateCcw aria-hidden="true" />
+              <FaUndo size={14} aria-hidden="true" />
             </button>
           </div>
           <div className="terminal-screen">
@@ -316,7 +317,7 @@ export const Terminal = forwardRef<TerminalHandle, { onListen: () => void }>(
                 </p>
                 <AnimatedGreeting />
                 <p className="intro-copy">
-                  Я m0xxie. Делаю музыку, пишу код.
+                  Я m0xxie. Делаю музыку и пишу код.
                   <br />
                   Всё остальное — между строк.
                 </p>

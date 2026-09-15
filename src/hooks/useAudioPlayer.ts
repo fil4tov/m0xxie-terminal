@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { tracks } from "../tracks";
-import { createAudioFader } from "../lib/createAudioFader";
+import { createAudioFader, usesSystemVolume } from "../lib/createAudioFader";
 const VOLUME_STORAGE_KEY = "m0xxie-player-volume";
 const DEFAULT_VOLUME = 0.5;
 const ORDER_STORAGE_KEY = "m0xxie-player-track-order";
@@ -59,7 +59,9 @@ export function useAudioPlayer(enabled = true) {
     [playing, setPlaying] = useState(false),
     [position, setPosition] = useState(0),
     [duration, setDuration] = useState(tracks[order[0]]?.duration ?? 0),
-    [volume, setVolumeState] = useState(readVolume),
+    [volume, setVolumeState] = useState(() =>
+      usesSystemVolume() ? 1 : readVolume(),
+    ),
     [error, setError] = useState("");
   const volumeRef = useRef(volume);
   const durationCache = useRef<(number | null)[]>(
@@ -281,6 +283,94 @@ export function useAudioPlayer(enabled = true) {
       loadedIndex.current = null;
     };
   }, [enabled]);
+  useEffect(() => {
+    if (!enabled || !tracks.length) return;
+    const audioSession = (
+      navigator as Navigator & {
+        audioSession?: { type: string };
+      }
+    ).audioSession;
+    const previousType = audioSession?.type;
+    try {
+      if (audioSession) audioSession.type = "playback";
+    } catch {
+      // The native audio element still works when this optional API is restricted.
+    }
+    const session = navigator.mediaSession;
+    const registered: MediaSessionAction[] = [];
+    const actions: Partial<
+      Record<MediaSessionAction, MediaSessionActionHandler>
+    > = {
+      play: () => {
+        if (!wantsToPlay.current) void play();
+      },
+      pause: () => pause(),
+      stop: () => transport("stop"),
+      previoustrack: () => transport("previous"),
+      nexttrack: () => transport("next"),
+      seekto: ({ seekTime }) => {
+        if (seekTime !== undefined) seek(seekTime);
+      },
+    };
+    if (session) {
+      for (const action of Object.keys(actions) as MediaSessionAction[]) {
+        try {
+          session.setActionHandler(action, actions[action]!);
+          registered.push(action);
+        } catch {
+          // Browsers support different subsets of lock-screen controls.
+        }
+      }
+    }
+    return () => {
+      for (const action of registered) {
+        try {
+          session.setActionHandler(action, null);
+        } catch {}
+      }
+      if (session) {
+        session.metadata = null;
+        session.playbackState = "none";
+        try {
+          session.setPositionState?.();
+        } catch {}
+      }
+      try {
+        if (audioSession && previousType !== undefined)
+          audioSession.type = previousType;
+      } catch {}
+    };
+  }, [enabled]);
+  useEffect(() => {
+    const session = navigator.mediaSession;
+    if (!enabled || !session || !tracks[index]) return;
+    if (typeof MediaMetadata !== "undefined") {
+      session.metadata = new MediaMetadata({
+        title: tracks[index].title,
+        artist: tracks[index].artist,
+      });
+    }
+  }, [enabled, index]);
+  useEffect(() => {
+    if (enabled && navigator.mediaSession) {
+      navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+    }
+  }, [enabled, playing]);
+  useEffect(() => {
+    const session = navigator.mediaSession;
+    if (!enabled || !session) return;
+    try {
+      if (Number.isFinite(duration) && duration > 0) {
+        session.setPositionState?.({
+          duration,
+          playbackRate: 1,
+          position: Math.max(0, Math.min(position, duration)),
+        });
+      } else session.setPositionState?.();
+    } catch {
+      // Position reporting is optional and must not interrupt playback.
+    }
+  }, [enabled, duration, position]);
   function transport(action: TransportAction) {
     const element = audio.current;
     if (!element) return;
@@ -334,6 +424,7 @@ export function useAudioPlayer(enabled = true) {
     duration,
     durations: order.map((i) => durations[i]),
     volume,
+    systemVolume: usesSystemVolume(),
     error,
     shuffle,
     toggleShuffle,

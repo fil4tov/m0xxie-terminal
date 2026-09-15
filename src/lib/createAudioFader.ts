@@ -1,7 +1,30 @@
 const FADE_SECONDS = 0.04;
 
+export function usesSystemVolume() {
+  return (
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 /** Smooth the actual audio signal; keep the user's saved volume separate. */
 export function createAudioFader(element: HTMLAudioElement) {
+  // iOS can suspend Web Audio when locked. Keep touch-device playback on the
+  // native media path, with no fade timers that can stall in a background tab.
+  if (usesSystemVolume() || window.matchMedia("(pointer: coarse)").matches) {
+    return {
+      hold() {},
+      silence() {
+        element.volume = 0;
+      },
+      fadeTo(target: number, complete?: () => void) {
+        element.volume = target;
+        complete?.();
+      },
+      resume: () => Promise.resolve(),
+      dispose() {},
+    };
+  }
   const context =
     typeof AudioContext === "undefined" ? null : new AudioContext();
   const gain = context?.createGain();

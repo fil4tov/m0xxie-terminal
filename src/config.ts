@@ -2,22 +2,30 @@ export interface ExternalLink {
   url?: string;
   label: string;
 }
+
 export interface ProfileLink extends ExternalLink {
   url: string;
   note: string;
 }
-export const links: Record<"github" | "telegram", ProfileLink> = {
+
+export const links: Record<"github", ProfileLink> = {
   github: {
-    url: "https://github.com/fil4tov",
-    label: "github.com/fil4tov",
     note: "Мои проекты в GitHub:",
-  },
-  telegram: {
-    url: "https://t.me/fil4tov",
-    label: "Telegram",
-    note: "Мой Telegram для связи:",
-  },
+    label: "github.com/fil4tov",
+    url: "https://github.com/fil4tov",
+  }
 };
+
+export const telegramLinks: ExternalLink[] = [
+  {
+    label: "Мой Telegram • @fil4tov",
+    url: "https://t.me/fil4tov",
+  },
+  {
+    label: "Паблик с музыкой • @m0xxie",
+    url: "https://t.me/m0xxie",
+  },
+];
 
 export const musicLinks: ExternalLink[] = [
   { label: "Яндекс Музыка", url: "https://music.yandex.ru/artist/25391727" },

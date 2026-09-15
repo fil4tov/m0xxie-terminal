@@ -1,4 +1,9 @@
-import { links, musicLinks, type ExternalLink } from "../config";
+import {
+  links,
+  musicLinks,
+  telegramLinks,
+  type ExternalLink,
+} from "../config";
 import {
   FiHeadphones,
   FiHelpCircle,
@@ -24,8 +29,13 @@ export function resolveCommand(raw: string): CommandResult {
   if (name === "pwd") return { text: window.location.href };
   if (name === "ping") return { text: "pong" };
   if (name === "myip") return { text: "Определяю IP…", action: "myip" };
-  if (name === "github" || name === "telegram")
-    return { text: links[name].note, links: [links[name]] };
+  if (name === "github")
+    return { text: links.github.note, links: [links.github] };
+  if (name === "telegram")
+    return {
+      text: "Мои Telegram ссылки",
+      links: [...telegramLinks],
+    };
   if (name === "music")
     return {
       text: musicLinks.length
