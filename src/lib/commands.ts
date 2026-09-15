@@ -33,7 +33,7 @@ export function resolveCommand(raw: string): CommandResult {
     return { text: links.github.note, links: [links.github] };
   if (name === "telegram")
     return {
-      text: "Мои Telegram ссылки",
+      text: "Мои Telegram ссылки:",
       links: [...telegramLinks],
     };
   if (name === "music")

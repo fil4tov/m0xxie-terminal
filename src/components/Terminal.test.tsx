@@ -315,7 +315,7 @@ describe("Terminal", () => {
     submit("/telegram");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(2000));
-    expect(screen.getByRole("log")).toHaveTextContent("Мои Telegram ссылки");
+    expect(screen.getByRole("log")).toHaveTextContent("Мои Telegram ссылки:");
     const renderedLinks = screen.getAllByRole("link");
     expect(renderedLinks).toHaveLength(2);
     expect(renderedLinks[0]).toHaveAccessibleName("Мой Telegram • @fil4tov");

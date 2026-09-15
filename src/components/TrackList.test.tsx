@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TrackList } from "./TrackList";
 
@@ -45,17 +51,19 @@ function setup() {
 }
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 it("preserves click-to-play controls alongside separate drag handles", () => {
   const played: string[] = [];
+  const volumes: number[] = [];
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (
     this: HTMLMediaElement,
   ) {
     played.push(this.src);
-    expect(this.volume).toBe(0.3);
+    volumes.push(this.volume);
     return Promise.resolve();
   });
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
@@ -70,6 +78,7 @@ it("preserves click-to-play controls alongside separate drag handles", () => {
   expect(played[0]).toMatch(/\/sounds\/switch\.mp3$/);
   expect(played[1]).toMatch(/\/sounds\/play\.mp3$/);
   expect(played[2]).toMatch(/\/sounds\/play\.mp3$/);
+  expect(volumes).toEqual([0.25, 0.25, 0.25]);
   fireEvent.click(screen.getByRole("button", { name: "Переместить First" }));
   expect(reordered).not.toHaveBeenCalled();
   expect(transport).toHaveBeenCalledTimes(2);
