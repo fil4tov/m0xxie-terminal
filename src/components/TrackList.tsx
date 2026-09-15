@@ -9,6 +9,7 @@ import { Accessibility, Feedback } from "@dnd-kit/dom";
 import { FiChevronRight, FiMenu } from "react-icons/fi";
 import type { AudioPlayer } from "../hooks/useAudioPlayer";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { useTransportSounds } from "../hooks/useTransportSounds";
 import { formatTime } from "../lib/formatTime";
 
 type ListPlayer = Pick<
@@ -36,6 +37,12 @@ const accessibility = Accessibility.configure({
 
 export function TrackList({ player }: { player: ListPlayer }) {
   const reduced = useReducedMotion();
+  const playSound = useTransportSounds();
+  const selectTrack = (index: number) => {
+    playSound(player.index === index ? "play" : "next");
+    if (player.index === index) player.transport("play");
+    else player.choose(index, true);
+  };
   return (
     <DragDropProvider
       plugins={(defaults) => [
@@ -67,6 +74,7 @@ export function TrackList({ player }: { player: ListPlayer }) {
             player={player}
             index={index}
             reduced={reduced}
+            onSelect={selectTrack}
           />
         ))}
       </div>
@@ -78,10 +86,12 @@ function SortableTrack({
   player,
   index,
   reduced,
+  onSelect,
 }: {
   player: ListPlayer;
   index: number;
   reduced: boolean;
+  onSelect: (index: number) => void;
 }) {
   const track = player.tracks[index];
   const disabled = player.tracks.length < 2;
@@ -101,11 +111,7 @@ function SortableTrack({
       <button
         type="button"
         className="track"
-        onClick={() =>
-          player.index === index
-            ? player.transport("play")
-            : player.choose(index, true)
-        }
+        onClick={() => onSelect(index)}
         aria-pressed={player.index === index}
         aria-label={`Выбрать ${track.title}`}
       >

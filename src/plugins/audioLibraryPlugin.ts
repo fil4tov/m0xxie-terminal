@@ -1,5 +1,13 @@
 import { readdirSync } from "node:fs";
-import { basename, extname, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import type { Plugin } from "vite";
 import { parseFile } from "music-metadata";
 
@@ -20,7 +28,7 @@ export async function readAudioLibrary(directory: string, base = "/") {
       throw error;
     }
   }
-  const files = scan(directory).sort((a, b) =>
+  const files = scan(join(directory, "audio")).sort((a, b) =>
     a.localeCompare(b, "en", { numeric: true }),
   );
   const tracks = [];
@@ -51,11 +59,13 @@ export async function readAudioLibrary(directory: string, base = "/") {
 
 export function audioLibraryPlugin(): Plugin {
   let publicDirectory: string;
+  let audioDirectory: string;
   let base: string;
   return {
     name: "audio-library",
     configResolved(config) {
       publicDirectory = resolve(config.publicDir);
+      audioDirectory = join(publicDirectory, "audio");
       base = config.base;
     },
     resolveId(id) {
@@ -67,13 +77,18 @@ export function audioLibraryPlugin(): Plugin {
     },
     configureServer(server) {
       const onChange = (file: string) => {
-        const path = relative(publicDirectory, resolve(file));
-        if (path.startsWith("..") || !audioExtension.test(path)) return;
+        const path = relative(audioDirectory, resolve(file));
+        if (
+          path.startsWith(`..${sep}`) ||
+          isAbsolute(path) ||
+          !audioExtension.test(path)
+        )
+          return;
         const module = server.moduleGraph.getModuleById(resolvedId);
         if (module) server.moduleGraph.invalidateModule(module);
         server.ws.send({ type: "full-reload" });
       };
-      server.watcher.add(publicDirectory);
+      server.watcher.add(audioDirectory);
       server.watcher
         .on("add", onChange)
         .on("unlink", onChange)

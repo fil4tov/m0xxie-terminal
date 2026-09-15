@@ -50,14 +50,31 @@ afterEach(() => {
 });
 
 it("preserves click-to-play controls alongside separate drag handles", () => {
-  const { choose, transport, reordered } = setup();
+  const played: string[] = [];
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    played.push(this.src);
+    expect(this.volume).toBe(0.3);
+    return Promise.resolve();
+  });
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  const { choose, transport, reordered, unmount } = setup();
   fireEvent.click(screen.getByRole("button", { name: "Выбрать Second" }));
   expect(choose).toHaveBeenCalledWith(1, true);
   fireEvent.click(screen.getByRole("button", { name: "Выбрать First" }));
   expect(transport).toHaveBeenCalledWith("play");
+  fireEvent.click(screen.getByRole("button", { name: "Выбрать First" }));
+  expect(played).toHaveLength(3);
+  expect(played[0]).toMatch(/\/sounds\/switch\.mp3$/);
+  expect(played[1]).toMatch(/\/sounds\/play\.mp3$/);
+  expect(played[2]).toMatch(/\/sounds\/play\.mp3$/);
   fireEvent.click(screen.getByRole("button", { name: "Переместить First" }));
   expect(reordered).not.toHaveBeenCalled();
-  expect(transport).toHaveBeenCalledTimes(1);
+  expect(transport).toHaveBeenCalledTimes(2);
+  expect(played).toHaveLength(3);
+  unmount();
 });
 
 it("uses dnd-kit keyboard sorting and cancels with Escape", async () => {

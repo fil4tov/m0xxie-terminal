@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { AudioPlayer } from "../hooks/useAudioPlayer";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { useTransportSounds } from "../hooks/useTransportSounds";
 import { CassetteScene } from "./CassetteScene";
 import { TrackList } from "./TrackList";
 import { formatTime as time } from "../lib/formatTime";
@@ -19,6 +20,7 @@ export function PlayerPanel({
   player: AudioPlayer;
   onClose: () => void;
 }) {
+  const transportWithSound = useTransportSounds(player.transport);
   const panel = useRef<HTMLElement>(null),
     reduced = useReducedMotion();
   useEffect(() => {
@@ -80,14 +82,14 @@ export function PlayerPanel({
         <div>
           <button
             disabled={!player.track}
-            onClick={() => player.transport("previous")}
+            onClick={() => transportWithSound("previous")}
             aria-label="Предыдущий трек"
           >
             <FiSkipBack aria-hidden="true" />
           </button>
           <button
             disabled={!player.track}
-            onClick={() => player.transport("play")}
+            onClick={() => transportWithSound("play")}
             className="play-button"
             aria-label={player.playing ? "Пауза" : "Воспроизвести"}
           >
@@ -99,7 +101,7 @@ export function PlayerPanel({
           </button>
           <button
             disabled={!player.track}
-            onClick={() => player.transport("next")}
+            onClick={() => transportWithSound("next")}
             aria-label="Следующий трек"
           >
             <FiSkipForward aria-hidden="true" />

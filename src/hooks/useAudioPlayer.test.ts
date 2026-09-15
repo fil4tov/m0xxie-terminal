@@ -55,8 +55,11 @@ class TestAudio extends EventTarget {
   duration = 240;
   paused = true;
   readyState = 0;
-  constructor() {
+  initialSource: string;
+  constructor(src = "") {
     super();
+    this.initialSource = src;
+    this.source = src;
     TestAudio.instances.push(this);
   }
   async play() {
@@ -549,7 +552,9 @@ describe("audio transport", () => {
       expect(TestAudio.sources).toEqual([`/audio/${title}.mp3`]);
       fireEvent.click(screen.getByRole("button", { name: "Закрыть плеер" }));
       await openPlayer();
-      expect(TestAudio.instances).toHaveLength(1);
+      expect(
+        TestAudio.instances.filter((audio) => !audio.initialSource),
+      ).toEqual([media]);
       expect(
         screen.getByRole("slider", { name: "Позиция воспроизведения" }),
       ).toHaveValue("42");

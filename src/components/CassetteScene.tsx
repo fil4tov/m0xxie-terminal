@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { TransportAction } from "../hooks/useAudioPlayer";
+import { useTransportSounds } from "../hooks/useTransportSounds";
 import type { PlayerScene } from "../three/createPlayer";
 
 export function CassetteScene({
@@ -9,25 +10,26 @@ export function CassetteScene({
   playing: boolean;
   onAction: (action: TransportAction) => void;
 }) {
+  const actionWithSound = useTransportSounds(onAction);
   const container = useRef<HTMLDivElement>(null),
     scene = useRef<PlayerScene | null>(null),
-    actionRef = useRef(onAction),
+    actionRef = useRef(actionWithSound),
     playingRef = useRef(playing);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    actionRef.current = onAction;
+    actionRef.current = actionWithSound;
     playingRef.current = playing;
     scene.current?.setPlaying(playing);
-  }, [onAction, playing]);
+  }, [actionWithSound, playing]);
   useEffect(() => {
     let disposed = false;
     setFailed(false);
     import("../three/createPlayer")
       .then(({ createPlayer }) => {
         if (disposed || !container.current) return;
-        scene.current = createPlayer(container.current, (action) =>
-          actionRef.current(action),
-        );
+        scene.current = createPlayer(container.current, (action) => {
+          actionRef.current(action);
+        });
         scene.current.setPlaying(playingRef.current);
       })
       .catch((error: unknown) => {
