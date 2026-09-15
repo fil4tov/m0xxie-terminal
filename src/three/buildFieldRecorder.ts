@@ -299,6 +299,92 @@ export function buildFieldRecorder(group: THREE.Group) {
 
   // Rear shell ends at z=0.28, exactly where the front cover begins.
   box(3.95, 2.53, 0.6, 0, 0, -0.02, fieldPaint, 0.15);
+  // Rear details use outward-facing local coordinates, including the lettering.
+  const rear = new THREE.Group();
+  rear.position.z = -0.32;
+  rear.rotation.y = Math.PI;
+  group.add(rear);
+  for (const x of [-1.73, 1.73])
+    for (const y of [-1.04, 1.04]) screw(x, y, 0.006, rear);
+
+  // A shallow seam and inset-colored lid suggest a removable battery cover.
+  box(2.88, 0.88, 0.018, 0, -0.53, 0.003, darkMetal, 0.04, rear);
+  box(2.83, 0.83, 0.02, 0, -0.53, 0.016, fieldPaint, 0.04, rear);
+  for (let i = 0; i < 4; i++)
+    box(
+      0.33,
+      0.016,
+      0.012,
+      0.94,
+      -0.43 - i * 0.065,
+      0.03,
+      darkMetal,
+      0.005,
+      rear,
+    );
+  label(
+    "OPEN  ↓",
+    0.42,
+    0.085,
+    0,
+    -0.75,
+    0.03,
+    "#514d3d",
+    "monospace",
+    "normal",
+    rear,
+  );
+
+  box(1.95, 0.66, 0.018, -0.37, 0.49, 0.007, darkMetal, 0.025, rear);
+  label(
+    "M0XXIE  /  FR–01",
+    1.63,
+    0.13,
+    -0.37,
+    0.66,
+    0.021,
+    "#d9d0b0",
+    "monospace",
+    "bold",
+    rear,
+  );
+  label(
+    "PORTABLE FIELD RECORDER",
+    1.63,
+    0.08,
+    -0.37,
+    0.49,
+    0.021,
+    "#b7b09b",
+    "monospace",
+    "normal",
+    rear,
+  );
+  label(
+    "DC 3V  ·  2 × AA   /   S/N 0001",
+    1.63,
+    0.07,
+    -0.37,
+    0.33,
+    0.021,
+    "#b7b09b",
+    "monospace",
+    "normal",
+    rear,
+  );
+  for (let i = 0; i < 4; i++)
+    box(
+      0.46,
+      0.026,
+      0.01,
+      1.08,
+      0.67 - i * 0.12,
+      0.002,
+      darkMetal,
+      0.005,
+      rear,
+    );
+
   box(3.98, 2.25, 0.32, 0, -0.04, -0.03, rubber, 0.08);
   box(3.89, 2.46, 0.12, 0, 0, 0.34, fieldPaint, 0.05);
   box(1.13, 1.34, 0.025, -1.18, 0.42, 0.416, darkMetal, 0.05);
