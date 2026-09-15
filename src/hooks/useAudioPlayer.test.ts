@@ -6,7 +6,8 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useAudioPlayer } from "./useAudioPlayer";
+import { useAudioPlayer, type TransportAction } from "./useAudioPlayer";
+import { createPlayer } from "../three/createPlayer";
 import App from "../App";
 import { PlayerPanel } from "../components/PlayerPanel";
 import { createElement } from "react";
@@ -34,7 +35,12 @@ const library = vi.hoisted(() => [
 vi.mock("../tracks", () => ({ tracks: library }));
 // JSDOM has no WebGL; keep the real player controls and stub only the 3D renderer.
 vi.mock("../three/createPlayer", () => ({
-  createPlayer: () => ({ setPlaying() {}, dispose() {} }),
+  createPlayer: vi.fn(
+    (
+      _container: HTMLDivElement,
+      _onAction: (action: TransportAction) => void,
+    ) => ({ setPlaying() {}, dispose() {} }),
+  ),
 }));
 
 // JSDOM cannot decode audio: simulate only the browser's media boundary.
@@ -196,6 +202,11 @@ describe("audio transport", () => {
       playbackRate: 1,
       position: 42,
     });
+    await act(async () =>
+      handlers.get("previoustrack")!({ action: "previoustrack" }),
+    );
+    expect(result.current.track?.title).toBe("free my mind");
+    expect(result.current.position).toBe(0);
     await act(async () =>
       handlers.get("previoustrack")!({ action: "previoustrack" }),
     );
@@ -684,6 +695,106 @@ describe("audio transport", () => {
     expect(TestAudio.sources).toHaveLength(2);
     await act(async () => result.current.transport("play"));
     expect(TestAudio.sources[2]).toBe("/audio/free%20my%20mind.wav");
+  });
+  it.each([2.99, 3, 3.01, 42])(
+    "restarts only previous after three seconds, using the live media position (%s)",
+    async (position) => {
+      const { result } = renderHook(useAudioPlayer);
+      await act(async () => result.current.choose(1, true));
+      const media = TestAudio.instances[0];
+      // The browser can advance past the threshold between timeupdate events.
+      media.currentTime = position;
+      expect(result.current.position).toBe(0);
+      await act(async () => result.current.transport("previous"));
+      expect(result.current.index).toBe(position > 3 ? 1 : 0);
+      expect(result.current.position).toBe(0);
+      expect(media.currentTime).toBe(0);
+      expect(result.current.playing).toBe(true);
+      expect(TestAudio.sources).toHaveLength(position > 3 ? 1 : 2);
+      if (position > 3) {
+        await act(async () => result.current.transport("previous"));
+        expect(result.current.index).toBe(0);
+      }
+    },
+  );
+  it("still advances next after more than three seconds", async () => {
+    const { result } = renderHook(useAudioPlayer);
+    await act(async () => result.current.choose(1, true));
+    act(() => result.current.seek(42));
+    await act(async () => result.current.transport("next"));
+    expect(result.current.index).toBe(2);
+    expect(result.current.position).toBe(0);
+    expect(result.current.playing).toBe(true);
+  });
+  it.each(["panel", "model"])(
+    "applies previous restart through the %s controls",
+    async (surface) => {
+      const { result } = renderHook(useAudioPlayer);
+      await act(async () => result.current.choose(1, true));
+      await act(async () => {
+        render(
+          createElement(PlayerPanel, {
+            player: result.current,
+            onClose: vi.fn(),
+          }),
+        );
+      });
+      const onModelAction = vi.mocked(createPlayer).mock.calls.at(-1)![1];
+      const press = async (action: "previous" | "next") => {
+        await act(async () => {
+          if (surface === "model") onModelAction(action);
+          else
+            fireEvent.click(
+              screen.getByRole("button", {
+                name:
+                  action === "previous" ? "Предыдущий трек" : "Следующий трек",
+              }),
+            );
+        });
+      };
+      act(() => result.current.seek(42));
+      await press("previous");
+      expect(result.current.index).toBe(1);
+      expect(result.current.position).toBe(0);
+      expect(result.current.playing).toBe(true);
+      await press("previous");
+      expect(result.current.index).toBe(0);
+      act(() => result.current.seek(42));
+      await press("next");
+      expect(result.current.index).toBe(1);
+    },
+  );
+  it.each([false, true])(
+    "restarts a paused track without resuming or reloading it (loaded: %s)",
+    async (loaded) => {
+      const { result } = renderHook(useAudioPlayer);
+      await act(async () => result.current.choose(1, loaded));
+      const media = TestAudio.instances[0];
+      if (loaded) act(() => media.pause());
+      act(() => result.current.seek(42));
+      act(() => result.current.transport("previous"));
+      expect(result.current.index).toBe(1);
+      expect(result.current.position).toBe(0);
+      expect(media.currentTime).toBe(0);
+      expect(result.current.playing).toBe(false);
+      expect(TestAudio.sources).toHaveLength(loaded ? 1 : 0);
+    },
+  );
+  it("keeps shuffle history when restarting the current track", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const { result } = renderHook(useAudioPlayer);
+    act(() => result.current.toggleShuffle());
+    await act(async () => result.current.transport("play"));
+    await act(async () => result.current.transport("next"));
+    expect(result.current.index).toBe(2);
+    act(() => result.current.seek(42));
+    await act(async () => result.current.transport("previous"));
+    expect(result.current.index).toBe(2);
+    expect(result.current.position).toBe(0);
+    await act(async () => result.current.transport("previous"));
+    expect(result.current.index).toBe(0);
+    await act(async () => result.current.transport("next"));
+    expect(result.current.index).toBe(2);
   });
   it("responds to track completion, bounds seek/volume, and stops at zero", async () => {
     const { result } = renderHook(useAudioPlayer);

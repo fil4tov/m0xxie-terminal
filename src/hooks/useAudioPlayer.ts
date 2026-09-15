@@ -4,6 +4,7 @@ import { createAudioFader, usesSystemVolume } from "../lib/createAudioFader";
 const VOLUME_STORAGE_KEY = "m0xxie-player-volume";
 const DEFAULT_VOLUME = 0.5;
 const ORDER_STORAGE_KEY = "m0xxie-player-track-order";
+const PREVIOUS_RESTART_THRESHOLD_SECONDS = 3;
 
 function readOrder() {
   const fallback = tracks.map((_, i) => i);
@@ -384,6 +385,16 @@ export function useAudioPlayer(enabled = true) {
         positionRef.current = 0;
         setPosition(0);
       });
+    }
+    if (action === "previous") {
+      const currentPosition =
+        loadedIndex.current !== null && element.readyState >= 1
+          ? element.currentTime
+          : positionRef.current;
+      if (currentPosition > PREVIOUS_RESTART_THRESHOLD_SECONDS) {
+        seek(0);
+        return;
+      }
     }
     if (action === "previous" || action === "next")
       advance(action === "next" ? 1 : -1, wantsToPlay.current);

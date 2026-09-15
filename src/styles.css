@@ -506,6 +506,8 @@ h1 {
   padding-right: 16px;
 }
 .player-panel {
+  --player-edge-inset: 7px;
+  --device-overhang: 15px;
   min-width: 0;
   animation: appear 0.8s both;
 }
@@ -516,17 +518,23 @@ h1 {
   font-size: 10px;
   letter-spacing: 0.15em;
   color: var(--muted);
-  padding: 0 7px;
+  padding: 0 var(--player-edge-inset);
 }
 .player-heading > button {
-  font-size: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0;
+  /* Align the visible strokes of the 24px icon with the heading inset. */
+  margin-right: -5px;
+  font-size: 24px;
   line-height: 1;
   opacity: 0.7;
 }
 .device-stage {
   height: 330px;
   position: relative;
-  margin: 10px -15px 0;
+  margin: 10px calc(-1 * var(--device-overhang)) 0;
 }
 .device-halo {
   position: absolute;
@@ -552,7 +560,7 @@ h1 {
 }
 .device-side-label {
   position: absolute;
-  right: -4px;
+  right: calc(var(--device-overhang) + var(--player-edge-inset));
   top: 50%;
   transform: translateY(-50%);
   writing-mode: vertical-rl;
@@ -910,13 +918,9 @@ input[type="range"] {
   }
   .device-stage {
     height: 320px !important;
-    margin: 10px -15px 0;
   }
   .device-hint {
     font-size: 9px;
-  }
-  .device-side-label {
-    right: 5px;
   }
   .now-playing {
     gap: 10px;
@@ -997,7 +1001,6 @@ svg {
 .terminal-top button,
 .enter-button,
 .slash-button,
-.player-heading > button,
 .transport button {
   display: inline-flex;
   align-items: center;

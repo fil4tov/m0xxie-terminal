@@ -2,6 +2,21 @@ import * as THREE from "three";
 import { buildFieldRecorder } from "./buildFieldRecorder";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { TransportAction } from "../hooks/useAudioPlayer";
+
+// Основные настройки анимации плеера.
+const resumeDelayMs = 2000; // Пауза после ухода курсора, миллисекунды.
+const alignmentDuration = 6; // Выравнивание модели, секунды.
+const accelerationDuration = 2; // Разгон до обычной скорости, секунды.
+const swayPeriod = 45; // Полный цикл горизонтального покачивания, секунды.
+const swayAngle = THREE.MathUtils.degToRad(35); // Максимальный поворот в каждую сторону.
+
+// Случайные вертикальные наклоны: длительность в секундах, углы в градусах.
+const pitchDurationMin = 10;
+const pitchDurationMax = 18;
+const pitchAngleMinDegrees = 3;
+const pitchAngleMaxDegrees = 7;
+const pitchSkipChance = 0.35; // Вероятность интервала без вертикального наклона (0–1).
+
 export interface PlayerScene {
   setPlaying(value: boolean): void;
   dispose(): void;
@@ -45,10 +60,40 @@ export function createPlayer(
   const group = new THREE.Group();
   scene.add(group);
   const { reels, buttons, led } = buildFieldRecorder(group);
-  group.rotation.set(0.13, -0.42, -0.055);
+  const frontRotation = new THREE.Quaternion();
+  group.quaternion.copy(frontRotation);
   const targetRotation = group.quaternion.clone(),
     dragRotation = new THREE.Quaternion(),
-    dragAxis = new THREE.Vector3();
+    dragAxis = new THREE.Vector3(),
+    alignmentStart = new THREE.Quaternion(),
+    verticalAxis = new THREE.Vector3(0, 1, 0),
+    horizontalAxis = new THREE.Vector3(1, 0, 0),
+    pitchRotation = new THREE.Quaternion();
+  let motion: "manual" | "automatic" = "manual";
+  let motionTime = 0;
+  let pitchStart = 0,
+    pitchDuration = 0,
+    pitchAngle = 0;
+  let pointerInside = container.matches(":hover");
+  let resumeMotionAt = 0;
+  let accelerationTime = accelerationDuration;
+  function acceleratedTime(seconds: number) {
+    const progress = Math.min(seconds / accelerationDuration, 1);
+    // Integral of smoothstep speed: starts at rest and reaches normal speed
+    // without a jump, independently of the display's frame rate.
+    return (
+      accelerationDuration * (progress ** 3 - progress ** 4 / 2) +
+      Math.max(0, seconds - accelerationDuration)
+    );
+  }
+  function setPointerInside(value: boolean) {
+    if (pointerInside && !value) {
+      resumeMotionAt = performance.now() + resumeDelayMs;
+      // A fresh alignment already eases from rest over its configured duration.
+      accelerationTime = motion === "automatic" ? 0 : accelerationDuration;
+    }
+    pointerInside = value;
+  }
   scene.environmentIntensity = 1.05;
   let playing = false,
     visible = true,
@@ -90,8 +135,23 @@ export function createPlayer(
     return undefined;
   }
   renderer.domElement.addEventListener(
+    "pointerenter",
+    (e) => {
+      if (e.pointerType !== "touch") setPointerInside(true);
+    },
+    { signal: events.signal },
+  );
+  renderer.domElement.addEventListener(
+    "pointerleave",
+    () => {
+      setPointerInside(false);
+    },
+    { signal: events.signal },
+  );
+  renderer.domElement.addEventListener(
     "pointerdown",
     (e) => {
+      setPointerInside(true);
       dragging = true;
       moved = false;
       startX = e.clientX;
@@ -108,6 +168,8 @@ export function createPlayer(
           dy = e.clientY - startY;
         if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
         if (moved) {
+          if (motion === "automatic") targetRotation.copy(group.quaternion);
+          motion = "manual";
           // Apply each drag around fixed axes so turning stays responsive
           // even when the recorder is upside down or viewed from behind.
           dragAxis.set(dy * 0.005, dx * 0.007, 0);
@@ -142,12 +204,23 @@ export function createPlayer(
         }
       }
       dragging = false;
+      const r = renderer.domElement.getBoundingClientRect();
+      setPointerInside(
+        e.pointerType !== "touch" &&
+          e.clientX >= r.left &&
+          e.clientX <= r.left + r.width &&
+          e.clientY >= r.top &&
+          e.clientY <= r.top + r.height,
+      );
     },
     { signal: events.signal },
   );
   renderer.domElement.addEventListener(
     "pointercancel",
-    () => (dragging = false),
+    () => {
+      dragging = false;
+      setPointerInside(false);
+    },
     { signal: events.signal },
   );
   function draw(t: number) {
@@ -155,7 +228,67 @@ export function createPlayer(
     if (disposed || !visible || document.hidden) return;
     const dt = Math.min((t - lastTime) / 1000, 0.05);
     lastTime = t;
-    group.quaternion.slerp(targetRotation, 0.12);
+    if (
+      playing &&
+      !pointerInside &&
+      !dragging &&
+      !reduced &&
+      t > resumeMotionAt
+    ) {
+      if (motion === "manual") {
+        alignmentStart.copy(group.quaternion);
+        const alreadyAligned = alignmentStart.angleTo(frontRotation) < 0.001;
+        motionTime = alreadyAligned ? alignmentDuration : 0;
+        if (alreadyAligned) accelerationTime = 0;
+        pitchStart = 0;
+        pitchDuration = 0;
+        pitchAngle = 0;
+        motion = "automatic";
+      }
+      const step = Math.min(dt, (t - resumeMotionAt) / 1000);
+      motionTime +=
+        acceleratedTime(accelerationTime + step) -
+        acceleratedTime(accelerationTime);
+      accelerationTime = Math.min(
+        accelerationTime + step,
+        accelerationDuration,
+      );
+      if (motionTime <= alignmentDuration) {
+        const progress = motionTime / alignmentDuration;
+        const eased = progress * progress * (3 - 2 * progress);
+        group.quaternion.slerpQuaternions(alignmentStart, frontRotation, eased);
+      } else {
+        const swayTime = motionTime - alignmentDuration;
+        const phase = (swayTime % swayPeriod) / swayPeriod;
+        group.quaternion.setFromAxisAngle(
+          verticalAxis,
+          -swayAngle * Math.sin(phase * Math.PI * 2),
+        );
+        // Independent, occasional nods: each starts and ends level with zero
+        // velocity, so random choices never jump or interrupt the yaw cycle.
+        while (swayTime >= pitchStart + pitchDuration) {
+          pitchStart += pitchDuration;
+          pitchDuration =
+            pitchDurationMin +
+            Math.random() * (pitchDurationMax - pitchDurationMin);
+          pitchAngle =
+            Math.random() < pitchSkipChance
+              ? 0
+              : THREE.MathUtils.degToRad(
+                  pitchAngleMinDegrees +
+                    Math.random() *
+                      (pitchAngleMaxDegrees - pitchAngleMinDegrees),
+                ) * (Math.random() < 0.5 ? -1 : 1);
+        }
+        const pitchProgress = (swayTime - pitchStart) / pitchDuration;
+        const pitch = pitchAngle * Math.sin(pitchProgress * Math.PI) ** 2;
+        pitchRotation.setFromAxisAngle(horizontalAxis, pitch);
+        group.quaternion.premultiply(pitchRotation);
+      }
+      targetRotation.copy(group.quaternion);
+    } else if (motion === "manual") {
+      group.quaternion.slerp(targetRotation, 0.12);
+    }
     if (!reduced) {
       if (playing) reels.forEach((r) => (r.rotation.z -= dt * 1.7));
     }
